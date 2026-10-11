@@ -1,5 +1,11 @@
 # Roadmap
 
+Completed release work is recorded in [CHANGELOG.md](CHANGELOG.md). This roadmap
+tracks active and remaining product work only.
+
+Use the [MoSCoW verification checklist](VERIFICATION-CHECKLIST.md) for cross-batch
+release and operational acceptance checks.
+
 ## Repositories
 
 All project repositories live in the [Mars-Command](https://github.com/Mars-Command) organisation:
@@ -24,29 +30,32 @@ All project repositories live in the [Mars-Command](https://github.com/Mars-Comm
   - [ ] Verify live GitHub OAuth, production cookie/redirect configuration, and the native packaged launcher.
   - [ ] Automatically return/focus the open launcher after website approval.
 - [ ] Add authenticated mod submission to remote storage with metadata for author, version, game/loader compatibility, source, and license.
-- [ ] Represent each uploaded mod version as an immutable release capsule: bind its exact artifact checksum to immutable release metadata and references to versioned provenance, compatibility, and scan attestations; keep release identity and ownership separate if identical bytes are deduplicated.
-- [ ] Store uploaded files in a private server-managed bucket; isolate unvalidated files from downloadable files.
-- [ ] Add queued upload processing with temporary edge staging, bounded storage, expiry, and visible pending/failure states.
-- [ ] Validate submissions before publishing; retain checksums and version history so downloads can be verified.
+  - [x] Reserve owner-scoped immutable release metadata and upload a bounded raw JAR into private quarantine.
+  - [x] Provide submission status, retry, refresh, and withdrawal controls in the website and desktop client.
+  - [ ] Enable a permitted production scanner and public publication after operational acceptance.
+- [x] Represent each uploaded mod version as an immutable release capsule: bind its exact artifact checksum to immutable release metadata and references to versioned provenance, compatibility, and scan attestations; keep release identity and ownership separate if identical bytes are deduplicated.
+- [x] Store uploaded files in a private server-managed bucket; isolate unvalidated files from downloadable files.
+- [x] Add durable queued upload processing with bounded private storage, expiry, and visible pending/failure states.
+- [x] Validate submitted bytes before publication eligibility; retain backend-observed checksums and version history for future verified downloads.
 - [ ] Require a source mod-page URL and a completed, acceptable backend virus scan for every published mod.
 - [ ] Add owner-authorized CRUD endpoints shared by the website and client for mods and mod profiles.
   - [x] Implement and test owner-authorized profile metadata CRUD through the shared API and both interfaces.
-  - [ ] Implement uploaded mod artifact CRUD and associated metadata.
+  - [x] Implement owner-authorized capsule reservation, upload, status, retry, and withdrawal APIs with immutable artifact metadata.
 - [ ] Keep profiles private unless explicitly submitted for publication; publish only profiles whose referenced mods pass validation.
   - [x] Keep newly created/copied profiles private and make edits withdraw public visibility.
   - [x] Reject publication when scanning is unavailable, including empty profiles; do not treat user-provided hashes as scan results.
   - [ ] Enable validated publication once artifact storage and scanning are implemented.
 - [ ] Publish validated submissions automatically and provide report and takedown controls.
 - [ ] Persist report/takedown incident metadata and deliver create/update/delete events to Discord with retryable webhook delivery.
-- [ ] Keep community files separate from the signed base-pack manifest and provide clear upload limits and failure messages.
+- [x] Keep community files separate from the signed base-pack manifest and provide clear upload limits and failure messages.
 
 ### Capsule publication pipeline
 
-- [ ] Define the capsule schema, immutable release identity, and owner-scoped references to deduplicated artifacts.
-- [ ] Define revisioned capsule states and allowed transitions, including quarantine, scanning, acceptance, publication, rejection, expiry, and withdrawal.
-- [ ] Make upload, scan, retry, withdrawal, and publication operations idempotent.
-- [ ] Attach versioned scan, provenance, and compatibility attestations to the exact artifact digest; preserve the evidence and policy version used for each publication decision.
-- [ ] Reject stale worker leases, scan evidence, revisions, and out-of-order transitions; recover abandoned work without changing capsule identity.
+- [x] Define the capsule schema, immutable release identity, and owner-scoped references to deduplicated artifacts.
+- [x] Define revisioned capsule states and allowed transitions, including quarantine, scanning, acceptance eligibility, rejection, expiry, and withdrawal.
+- [x] Make reservation, upload replay, scan retry, and withdrawal operations idempotent.
+- [x] Attach versioned scan evidence to the exact artifact digest; preserve provider, result, verdict, summary, timestamps, and policy version used for each eligibility decision.
+- [x] Reject stale worker leases, scan evidence, revisions, and out-of-order transitions; recover abandoned work without changing capsule identity.
 - [ ] Publish through one atomic state transition only after the digest, ownership, metadata, current policy, and required attestations pass.
 - [ ] Define rescan, evidence-expiry, withdrawal, takedown, and republishing behavior without rewriting historical decisions.
 
@@ -63,7 +72,8 @@ All project repositories live in the [Mars-Command](https://github.com/Mars-Comm
 - [ ] Let users install and remove community mods into their own isolated Mars installation.
 - [ ] Verify downloaded files against their published checksums and warn or block when compatibility or integrity checks fail.
 - [ ] Show installed mod versions and make updates/removals explicit and reversible.
-- [ ] Add reporting controls, upload/scan queue status, and applicable takedown notifications.
+- [x] Add private owner upload and scan-queue status controls without exposing a public artifact route.
+- [ ] Add reporting controls and applicable takedown notifications.
 
 ### Verified client activation
 
@@ -103,10 +113,12 @@ All project repositories live in the [Mars-Command](https://github.com/Mars-Comm
 
 ### Upload storage and scanning
 
-- Final files live in a server-managed bucket. Requested temporary CDN-node staging must be implemented using an upload-capable edge/object-storage service plus a durable queue, not ordinary CDN caching alone.
+- Batch 3 uses a private server filesystem bucket with SQLite queueing on persistent local disk. The quarantine, retained-artifact, and evidence paths are absolute, startup-validated, private, and must not overlap static, package, or public-release directories. This is intentionally a single-host design; unsupported shared or network filesystems are excluded.
+- A future edge/object-storage implementation must preserve the private-quarantine, durable-queue, digest-binding, expiry, and publication-policy guarantees; ordinary CDN caching is not upload staging.
 - Bucket placement alone is not an upload security boundary: require scoped upload authorization, private quarantine, size/type/archive limits, and controlled access to published files.
 - Every published mod requires a mod-page URL and an acceptable completed virus scan performed by the backend. A completed scan alone is not proof that a file is safe.
-- Configure VirusTotal with backend-only `VIRUSTOTAL_API_URL` and `VIRUSTOTAL_API_KEY`; never expose the key to the website or client.
+- The default production scanner is disabled and fails closed: it records private `scan_blocked` evidence with `scanning_not_configured`, never acceptable evidence. No scanner credential is exposed to the website or client.
+- VirusTotal integration is deferred until usage rights, file-submission disclosure, account limits, and a permitted plan are confirmed. If selected, configure its URL/key only in the backend environment.
 - Budget all VirusTotal requests, including uploads, hash lookups, and analysis polling. Deduplicate by content checksum, apply a defined scan-freshness policy, and enforce shared quota limits across workers.
 - The public API documents 4 requests/minute and 500 requests/day. The proposed 15,500 requests/month cap remains an additional planning limit to verify against the actual account.
 - Quota exhaustion or scanner failure leaves files pending and unavailable for publication; show the reason rather than bypassing validation.
@@ -144,9 +156,9 @@ All project repositories live in the [Mars-Command](https://github.com/Mars-Comm
 ## Remaining implementation decisions
 
 - GitHub OAuth is selected; the automatic desktop return/focus mechanism still needs a decision.
-- Bucket/edge-staging provider, durable queue, upload/archive limits, and retention periods.
-- Permitted scanning provider/plan, scan verdict and freshness policies, and verified account quotas.
-- Exact capsule API/schema and whether release records need an additional cryptographic signature beyond authenticated backend delivery and checksum verification.
+- Future edge/object-storage provider, if the single-host filesystem bucket is replaced.
+- Permitted scanning provider/plan, accepted verdict and freshness policies, and verified account quotas.
+- Whether release records need an additional cryptographic signature beyond authenticated backend delivery and checksum verification.
 - Exact compatibility admission criteria: metadata agreement, dependency resolution, archive inspection, bounded test launch, or a defined combination.
 - Client behavior for already-installed capsules that are later withdrawn, expire, or are taken down, including offline launch and rollback rules.
 - Moderation permissions, incident naming allocation, notification recipients, and complete deletion semantics.
@@ -156,55 +168,9 @@ All project repositories live in the [Mars-Command](https://github.com/Mars-Comm
 
 The launcher already verifies and syncs the signed base pack into an isolated game directory, checks stable GitHub releases for client installers, and opens the selected installer for the user. Community mods must remain user-controlled and separate from that trusted base pack.
 
-## Batch 1 acceptance: authentication and profile metadata
+## Completed release history
 
-No whole Milestone 2, 3, or 4 is complete. Checked items above describe implemented
-and locally tested foundations, not a deployed-service certification.
-
-- [x] Review [backend report](../doc/reports/sub_report-backend.md): accepted for authentication, owner/private profile metadata APIs, and unconditional scan gating only.
-- [x] Review [website report](../doc/reports/sub_report-website.md): accepted for identity confirmation, profile metadata management, and configured donation navigation only.
-- [x] Review [client report](../doc/reports/sub_report-client.md): accepted for Rust-memory credentials, title-bar login, Community metadata management, and configured donation navigation only.
-- [x] Independently validate the final backend revision: **45 tests passed**, including existing package regressions. One Starlette TestClient deprecation warning remains.
-- [x] Independently validate the final website revision: **49 tests passed**, production build and lint passed. A pre-existing development dependency advisory remains disclosed in its report.
-- [x] Independently validate the corrected launcher revision: **6 frontend tests and 56 Rust library tests passed**, production build and Rust formatting passed.
-- [x] Exercise actual local website/backend HTTP integration with a temporary synthetic identity: private create/edit/delete, explicit device approval, desktop bearer owner access, single-use replay denial, scan refusal, and logout.
-- [x] Align HTTPS-only mod source validation across interfaces; surface client cleanup/refresh failures and sanitize backend storage/OAuth failure logs.
-
-Live GitHub calls were mocked in automated tests; the local integration fixture
-did not authenticate against GitHub. Client browser checks used mocked Tauri IPC,
-not the native packaged runtime. Login is session-only in the launcher. Automatic
-return/focus is not implemented. Backend authentication requires origin-root routes
-and same-site hosting with its current cookie policy; frontend base-path routing
-does not establish nonroot authentication support.
-
-Uploads, bucket/edge storage, the durable scan queue, VirusTotal integration,
-validated public publication, community file installation, moderation, and Sponsor
-verification/role synchronization remain pending. Public search/copy tests use
-seeded fixtures because there is intentionally no production publication path yet.
-Temporary integration servers and fixture files were removed. All batch changes
-remain uncommitted and unpushed.
-
-## Batch 2 release-candidate acceptance
-
-Batch 2 hardens and versions the existing foundations without enabling live
-capsule upload, scanning, publication, or download. It does not complete any
-unfinished Milestone 2, 3, or 4 outcome.
-
-- [x] Prepare client **1.3.0** with synchronized npm, Cargo, Tauri, and lockfile versions plus tag/version enforcement.
-- [x] Prepare website **0.1.0** with synchronized package/lock versions, release checks, and test/lint/audit deployment gates.
-- [x] Prepare backend **0.2.0** with one authoritative version source and synchronized runtime/checked-in OpenAPI metadata.
-- [x] Review [Batch 2 client report](../doc/reports/sub_report-batch2-client.md) and independently verify **6 frontend tests**, production build, formatting, and **70 Rust library tests**.
-- [x] Review [Batch 2 website report](../doc/reports/sub_report-batch2-website.md) and independently verify **49 tests**, lint, production build, version checks, and a clean production dependency audit.
-- [x] Review [Batch 2 backend report](../doc/reports/sub_report-batch2-backend.md) and independently verify **72 tests**, compile validation, OpenAPI/version consistency, and whitespace checks.
-- [x] Build local Windows MSI and NSIS client installers through the release-mode Tauri build; no artifact was tagged or published.
-- [x] Smoke-test the final website/backend candidates with isolated temporary data: health, anonymous session, exact credentialed CORS, OAuth redirect initiation, desktop pending handoff, and root/account/login routes.
-- [x] Align the website's launcher display default/example with client **1.3.0** while keeping the website package independently versioned at **0.1.0**.
-
-Remaining release gates are live GitHub OAuth completion, native packaged-client
-approval/polling, production origin/cookie/proxy configuration, persistent backend
-storage and backup/restore operations, Linux CI packaging, GitHub Pages repository
-variables, final operator approval, commits, tags, deployment, and publication.
-The website's disclosed development-only `source-map-js` advisory remains; its
-production dependency audit is clean. The backend retains one existing Starlette
-TestClient deprecation warning. All Batch 2 source changes remain uncommitted and
-unpushed.
+See [CHANGELOG.md](CHANGELOG.md) for accepted Batch 1 authentication/profile
+foundations, Batch 2 release-candidate hardening, and the validated Batch 3
+private capsule-ingestion foundation. These releases did not complete the remaining
+Milestone 2, 3, or 4 outcomes.
