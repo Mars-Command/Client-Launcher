@@ -16,10 +16,10 @@ pub const MANIFEST_BASE_URL: &str = match option_env!("MARS_MANIFEST_BASE_URL") 
 
 /// Hex-encoded Ed25519 public key (32 bytes). Override at build time with
 /// `MARS_MANIFEST_PUBLIC_KEY` to rotate without editing source.
-/// This is a development key; generate a production pair before release.
+/// The default matches the pack signing key adopted for client 1.4.1.
 pub const MANIFEST_PUBLIC_KEY_HEX: &str = match option_env!("MARS_MANIFEST_PUBLIC_KEY") {
     Some(key) => key,
-    None => "2a8186165296c508fde2022fe9568ea3d692570202fc8e95496f1d8f32b8b351",
+    None => "a88e7dc70a1227cbc3decac967664e3bea75da9d72550e14f2c6a4ea8118391e",
 };
 
 const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -412,7 +412,18 @@ pub async fn fetch_verified() -> Result<(Manifest, ManifestStatus), ManifestStat
 
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_relative_path, FileSide, Manifest, ManifestFile, ManifestStatus};
+    use super::{FileSide, Manifest, ManifestFile, ManifestStatus, is_safe_relative_path};
+
+    #[test]
+    fn verifies_release_manifest_key_and_rejects_tampering() {
+        let body = include_bytes!("../tests/fixtures/pack-key-1.4.1.json");
+        let signature = include_str!("../tests/fixtures/pack-key-1.4.1.json.sig");
+        assert!(super::verify_signature(body, signature).is_ok());
+        let mut altered = body.to_vec();
+        altered.push(b' ');
+        assert!(super::verify_signature(&altered, signature).is_err());
+        assert!(super::verify_signature(body, &"00".repeat(64)).is_err());
+    }
 
     #[test]
     fn rejects_traversal_and_absolute_paths() {

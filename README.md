@@ -133,6 +133,15 @@ Batch 2 client release candidate **1.3.0** hardens the existing session-only Git
 
 Batch 3 client **1.4.0** adds the private native reservation/upload/status experience described above. It requires the Batch 3 backend capsule contract; it does not publish artifacts or connect submissions to installation/launch.
 
+Client **1.4.1** pins the updated pack-manifest public key
+`a88e7dc70a1227cbc3decac967664e3bea75da9d72550e14f2c6a4ea8118391e`,
+allowing verification of pack **1.2.5**, including Mars Command mod **0.4.0**.
+The installer workflow uses the same pin and tests an authentic signed fixture
+plus tamper rejection on both platforms. This key is separate from the
+Tauri/Minisign launcher-updater key; neither private key is included in the app.
+Clients built with the older pack key need to update the launcher before they
+can verify manifests signed by the new key.
+
 The in-app client update check uses stable, non-prerelease GitHub releases and selects the newest installer compatible with the current platform: `setup-X.Y.Z.exe` on Windows or `setup-X.Y.Z.deb` on Linux. For older releases it also accepts `setup.exe` or `setup.deb` when the release tag contains a valid version; a versioned asset is preferred when both names are published. Drafts, prereleases, unsupported platforms, and assets for another platform are not offered.
 
 When an update is available, choose **Open installer** to open its download in your browser. After it finishes, close Mars Command, open the downloaded installer, follow its prompts, and relaunch Mars Command. No installer runs or installs silently. If the release check cannot reach GitHub, retry after checking your connection or open the [GitHub releases page](https://github.com/Mars-Command/Client-Launcher/releases). If no compatible stable asset is published, check that page for `setup-X.Y.Z.exe` or `setup-X.Y.Z.deb` (or the legacy generic name), then retry the check later.

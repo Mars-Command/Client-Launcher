@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
 	"productName": "mars-command-client",
-	"version": "1.4.0",
+	"version": "1.4.1",
 	"identifier": "com.jorda.mars-command-client",
 	"build": {
 		"beforeDevCommand": "npm run dev",
@@ -42,7 +42,7 @@
 	},
 	"plugins": {
 		"updater": {
-			"pubkey": "",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBGOUJBOTQ4OUI5RDhBNEUKUldST2lwMmJTS21iRC83LzZoSlhhNk9POWYxZC90UnBFL1hTQkphcHZtMGl4RVNiU0wxTXhiM2UK",
 			"endpoints": [
 				"https://github.com/Mars-Command/Client-Launcher/releases/latest/download/latest.json"
 			],
