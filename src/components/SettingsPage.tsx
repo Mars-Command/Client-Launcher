@@ -16,6 +16,8 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import { Panel } from "./Panel";
 import { PersonalModsPanel } from "./PersonalModsPanel";
+import { ClientUpdatePanel } from "./ClientUpdatePanel";
+import type { ClientUpdater } from "../hooks/useClientUpdater";
 import { formatClock } from "../lib/format";
 import {
 	getClientPreferences,
@@ -30,6 +32,7 @@ const REPOSITORY_URL =
 const ISSUES_URL = `${REPOSITORY_URL}/issues/new`;
 
 type Props = {
+	updater: ClientUpdater;
 	pack: PackIntegrityState;
 	refreshingTelemetry: boolean;
 	refreshTelemetry: () => void;
@@ -38,6 +41,7 @@ type Props = {
 };
 
 export function SettingsPage({
+	updater,
 	pack,
 	refreshingTelemetry,
 	refreshTelemetry,
@@ -88,6 +92,7 @@ export function SettingsPage({
 				</header>
 
 				<PersonalModsPanel pack={pack} />
+				<ClientUpdatePanel updater={updater} blocked={pack.busy || pack.syncing || pack.personalModBusy} />
 
 				<div className="grid gap-4 md:grid-cols-2">
 					<Panel

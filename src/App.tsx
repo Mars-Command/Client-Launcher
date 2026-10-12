@@ -17,6 +17,7 @@ import { useCommunityAccount } from "./hooks/useCommunityAccount";
 import { useMissionControlConfig } from "./hooks/useMissionControlConfig";
 import { useMarsServerStatus } from "./hooks/useMarsServerStatus";
 import { usePackIntegrity } from "./hooks/usePackIntegrity";
+import { useClientUpdater } from "./hooks/useClientUpdater";
 import { EM_DASH, formatClock, normalizeMotd } from "./lib/format";
 import {
 	CLIENT_BUILD,
@@ -69,6 +70,7 @@ function App() {
 		});
 
 	const pack = usePackIntegrity();
+	const updater = useClientUpdater();
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [communityOpen, setCommunityOpen] = useState(false);
 	const [accountOpen, setAccountOpen] = useState(false);
@@ -109,6 +111,12 @@ function App() {
 					}
 				/>
 
+				{updater.phase === "available" || updater.phase === "error" || updater.phase === "downloading" || updater.phase === "installing" ? (
+					<div role="status" className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-200/15 bg-cyan-300/5 px-4 py-2 text-xs text-cyan-100">
+						<span>{updater.phase === "available" ? `Client ${updater.update?.version} is available. Review it in Settings.` : updater.phase === "error" ? "Client update check/install failed. See Settings for details." : updater.phase === "installing" ? "Verified client update is installing..." : "Client update is downloading..."}</span>
+						<button type="button" onClick={() => setSettingsOpen(true)} className="shrink-0 rounded border border-white/10 px-2 py-1">Update settings</button>
+					</div>
+				) : null}
 				<nav aria-label="Client sections" className="flex shrink-0 gap-2 border-b border-white/8 px-3 py-2 text-xs">
 					<button type="button" aria-pressed={!communityOpen && !settingsOpen} onClick={() => { setCommunityOpen(false); setSettingsOpen(false); }} className="rounded-lg px-3 py-1 text-slate-300 hover:bg-white/10">Mission control</button>
 					<button type="button" aria-pressed={communityOpen && !settingsOpen} onClick={() => { setCommunityOpen(true); setSettingsOpen(false); }} className="rounded-lg px-3 py-1 text-cyan-200 hover:bg-white/10">Community</button>
@@ -116,6 +124,7 @@ function App() {
 				{accountOpen && (!communityOpen || settingsOpen) ? <div className="shrink-0 px-3 pt-3"><AccountPanel account={account} /></div> : null}
 				{settingsOpen ? (
 					<SettingsPage
+						updater={updater}
 						onDonate={() => { setAccountOpen(true); void account.donate(); }}
 						donationPending={account.pending}
 						pack={pack}
@@ -158,6 +167,7 @@ function App() {
 						<section className="col-span-6 flex min-h-0 flex-col gap-3">
 							<DeploymentPanel
 								{...pack}
+								onOpenClientUpdates={() => setSettingsOpen(true)}
 							/>
 
 							{/* Absorbs vertical slack so no panel stretches into a void. */}

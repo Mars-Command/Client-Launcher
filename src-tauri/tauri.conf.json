@@ -30,6 +30,7 @@
 	},
 	"bundle": {
 		"active": true,
+		"createUpdaterArtifacts": true,
 		"targets": "all",
 		"icon": [
 			"icons/32x32.png",
@@ -38,5 +39,18 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		]
+	},
+	"plugins": {
+		"updater": {
+			"pubkey": "",
+			"endpoints": [
+				"https://github.com/Mars-Command/Client-Launcher/releases/latest/download/latest.json"
+			],
+			"requireSignedVersion": true,
+			"allowDowngrades": false,
+			"windows": {
+				"installMode": "passive"
+			}
+		}
 	}
 }

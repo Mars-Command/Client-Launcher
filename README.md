@@ -11,6 +11,21 @@ Mars Command is a Windows and Linux desktop companion for the **Mars** modded Mi
 
 ## Features
 
+### Application icon
+
+The header, browser icon, and native application icons use the shared generated
+planet **Petrora Rubra, the Crowned**. The source is `public/planet.png`.
+Generate it in the sibling [Planet Generation](https://github.com/JayNightmare/Planet-Generation) project:
+
+```sh
+python gen_planet.py --kind rocky --rings --ring-tilt -20 --ring-colors '#493020,#996038,#ffe0a0,#dbab65' --seed 1847263951 --size 1024 --pixels 128 --name --save-settings --out planets
+```
+
+Copy the generated PNG to `public/planet.png`, then run
+`npm run tauri -- icon public/planet.png` to regenerate `src-tauri/icons/`.
+The browser touch icon is a 180x180 PNG derived from the same source. Keep the
+website's planet and touch icons in sync when replacing this artwork.
+
 ### Server status
 
 The Rust backend polls the Minecraft Java status protocol every 15 seconds and reports online state, player count, latency, MOTD, and server build. Polling avoids overlapping checks and pauses while the window is hidden. The Mars proxy requires protocol version `767` for Minecraft 1.21.1; the conventional `-1` sentinel is rejected.
@@ -134,7 +149,7 @@ The API serves release artifacts but does not need the Ed25519 private key. Depl
 
 ## Development
 
-Prerequisites: Node.js, Rust, and the [Tauri v2 prerequisites](https://tauri.app/start/prerequisites/) for your platform.
+Prerequisites: Node.js 22+, Rust 1.90+ (edition 2024), and the [Tauri v2 prerequisites](https://tauri.app/start/prerequisites/) for your platform.
 
 ```powershell
 npm install
@@ -145,6 +160,7 @@ Run checks:
 
 ```powershell
 npm run build
+npm run test:updater
 cd src-tauri
 cargo fmt --check
 cargo test --all-targets
@@ -155,12 +171,98 @@ Build Windows installers from the repository root:
 ```powershell
 $env:MARS_MANIFEST_BASE_URL = "https://api.nexusgit.info/api/v1"
 $env:MARS_MANIFEST_PUBLIC_KEY = "<production public key in hex>"
-npm run tauri -- build
+$env:MARS_UPDATER_PUBLIC_KEY = Get-Content "$HOME/.tauri/mars-client.key.pub" -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY = "$HOME/.tauri/mars-client.key"
+# Supply TAURI_SIGNING_PRIVATE_KEY_PASSWORD through your secure local environment.
+$updaterConfig = @{ plugins = @{ updater = @{ pubkey = $env:MARS_UPDATER_PUBLIC_KEY.Trim() } } } | ConvertTo-Json -Depth 5 -Compress
+npm run tauri -- build --config $updaterConfig
 ```
 
-`MARS_MANIFEST_BASE_URL` and `MARS_MANIFEST_PUBLIC_KEY` are compile-time overrides. Rust `option_env!` does not automatically read `.env`. On Linux, install the Tauri Linux prerequisites and build a Debian package with `npm run tauri -- build --bundles deb`. Bundles are written under `src-tauri/target/release/bundle/` (NSIS/MSI on Windows and `.deb` on Linux).
+`MARS_MANIFEST_BASE_URL` and `MARS_MANIFEST_PUBLIC_KEY` are compile-time overrides. Rust `option_env!` does not automatically read `.env`. `MARS_UPDATER_PUBLIC_KEY` must be exported to the build environment; release builds reject a missing or invalid key. Debug builds without a key explicitly report that updates are disabled. The signing private key is read by the Tauri bundler, never embedded in the client. On Linux, install the Tauri prerequisites and build `--bundles deb,appimage` with the same signing variables and public-key config override. Bundles are written under `src-tauri/target/release/bundle/`.
 
 Before public distribution, use a production keypair whose public key is embedded in the client, and code-sign the Windows installer if you want to reduce SmartScreen warnings. Never ship the private signing key or an API JWT in the app.
+
+## Signed remote client updates
+
+The client checks the official GitHub Releases channel once at startup and offers
+manual checks in **Settings -> Client updates**. An available update shows its
+version and plain-text release notes. The user must review and confirm before any
+download or installation; Windows may exit as the installer starts, and Linux
+restarts after replacing the AppImage. Game installation mutations are serialized
+with client installation. This updates the launcher itself, not the Minecraft pack.
+The dashboard's **Client updates** shortcut opens this same signed update flow.
+**Manual downloads** opens the official releases page for bootstrap installs or
+repair; those browser downloads are not verified or installed by this client.
+
+The channel is
+`https://github.com/Mars-Command/Client-Launcher/releases/latest/download/latest.json`.
+The Rust backend owns the URL, compiled public key, pending release, download, and
+installation; the webview cannot provide an arbitrary URL, key, signature, or path.
+No updater plugin permissions are granted to JavaScript. Both manifest and
+artifact requests enforce HTTPS, including redirects, and retain normal certificate
+and hostname verification. Artifact URLs must point to the exact versioned assets
+in this repository. Downloads have a five-minute timeout and a **256 MiB** limit
+enforced on streamed bytes as well as Content-Length.
+
+Minisign verification authenticates the artifact and its trusted version comment
+before an installer can run. Tauri's installer independently verifies it again.
+An altered binary, wrong key, forged version comment, missing signed version, or
+old signed installer paired with a fabricated new version is rejected. Only
+versions newer than the running client are offered; prereleases are excluded.
+Errors remain visible in Settings and require another check before retrying.
+Release notes/manifest metadata are not themselves signed and must not be treated
+as authenticated claims before artifact verification.
+
+### Maintainer setup (required before shipping)
+
+1. Generate a **separate updater key**, outside every repository:
+
+   ```sh
+   npm run tauri -- signer generate -w "$HOME/.tauri/mars-client.key"
+   ```
+
+   Choose a strong password when prompted. Securely back up the encrypted private
+   key and password. Do not reuse the Minecraft manifest signing key, upload a key
+   here, or commit it. Losing the updater key prevents updates for installed clients
+   pinned to that key. Changing the public key requires a planned, old-key-signed
+   transition release before retiring the old key.
+
+2. Create a protected GitHub Actions environment named **client-release** with
+   required maintainer approval and deployment tag rules limited to `client-v*`.
+   Restrict who can create those tags and modify release workflows.
+   - Environment secret `TAURI_SIGNING_PRIVATE_KEY`: contents of the private key file.
+   - Environment secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: its password.
+   - Repository variable `MARS_UPDATER_PUBLIC_KEY`: contents of the `.pub` file
+     (the outer base64 text, not its decoded contents or a file path). This public
+     repository variable also lets the pack-manifest tooling compile; it is not secret.
+
+3. Update all release version surfaces together (package, npm lock root/package,
+   Tauri config, Cargo manifest and Cargo lock), then push a new `client-vX.Y.Z`
+   tag. The release workflow checks them, runs update-policy tests, embeds the
+   public key, and signs both Windows NSIS and Linux AppImage artifacts.
+   The CLI must support version-bound signatures (`signer sign --app-version`);
+   the locked CLI and updater versions provide this. Do not downgrade either.
+4. The workflow verifies both artifacts with Minisign against the pinned public
+   key, assembles `latest.json` and both signatures, uploads everything to
+   a draft, and only then publishes it as the latest client release. It refuses
+   to overwrite an existing release tag. Pack-manifest releases never become
+   GitHub's latest release, so they do not replace the client update channel.
+5. Before public rollout, install the bootstrap build on test Windows/Linux
+   machines, publish a higher test version with the same key, and verify update,
+   cancel, restart, bad-signature, and interrupted-download behavior.
+
+Windows NSIS installations support in-app updating. On Linux, **only AppImage
+installations support this updater**; `.deb` installations show explicit
+package-manager/manual-update guidance and are never overwritten with an AppImage.
+The website/manual `.exe` and `.deb` downloads remain available.
+
+Existing clients without this feature need **one manual installation** of the
+bootstrap release; subsequent releases can be delivered through the signed channel.
+Nothing is published and no production signing key is generated by this change.
+Signatures protect against a replaced download or compromised hosting account,
+but cannot protect against a stolen signing key or a compromised signing pipeline.
+GitHub environment approvals, workflow review, key custody, and normal OS installer
+code signing are still essential. OS code signing is separate from updater signatures.
 
 ## Generate A Manifest
 
@@ -222,6 +324,8 @@ src-tauri/src/
   settings.rs                Persistent settings, server list, and Launcher profiles
   process_detection.rs       Windows/Linux Minecraft process detection
   repair.rs                  GitHub release installer version checks
+  client_updates.rs          Confirmation-gated native client updater
+  client_update_policy.rs    Update URL and signed-artifact verification
   sync.rs                    Staged sync and installed-state tracking
   lib.rs                     Tauri commands and Setup/Update/Launch status
 src-tauri/examples/

@@ -1,5 +1,15 @@
 {
 	"name": "mars-command-client",
+	"displayName": "Mars Client",
+	"description": "A client application for managing Mars Command operations",
+	"author": "Jay Nightmare <jn3.enquiries@gmail.com>",
+	"homepage": "https://mars.nexusgit.info",
+	"icon": "./public/planet.png",
+	"license": "CC0-1.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Mars-Command/Client-Launcher.git"
+	},
 	"private": true,
 	"version": "1.4.0",
 	"type": "module",
@@ -7,6 +17,7 @@
 		"dev": "vite",
 		"build": "tsc && vite build",
 		"test:community": "node --test src/lib/accountErrors.test.mjs src/lib/communityValidation.test.mjs src/lib/capsuleValidation.test.mjs",
+		"test:updater": "node --test scripts/client-update-manifest.test.mjs",
 		"preview": "vite preview",
 		"tauri": "tauri"
 	},

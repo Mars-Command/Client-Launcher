@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Radio, Settings2, Square, UserRound, X } from "lucide-react";
+import { Minus, Settings2, Square, UserRound, X } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback } from "react";
 
@@ -40,7 +40,13 @@ export function TitleBar({
 		>
 			<div className="flex items-center gap-3">
 				<div className="grid h-7 w-7 place-items-center rounded-lg border border-red-300/20 bg-red-500/15 text-red-200">
-					<Radio size={15} />
+					<img
+						src={`${import.meta.env.BASE_URL}planet.png`}
+						width={26}
+						height={26}
+						alt=""
+						draggable={false}
+					/>
 				</div>
 
 				<div className="leading-tight">
@@ -54,10 +60,23 @@ export function TitleBar({
 			</div>
 
 			<div className="flex h-full items-center gap-1 pt-2 mb-2 pr-1">
-				<button type="button" aria-label={accountName ? `Account: ${accountName}` : "Open website account login"}
-					title={accountName ? `Signed in: ${accountName}` : accountPending ? "Awaiting website approval" : "Sign in with GitHub"}
+				<button
+					type="button"
+					aria-label={
+						accountName
+							? `Account: ${accountName}`
+							: "Open website account login"
+					}
+					title={
+						accountName
+							? `Signed in: ${accountName}`
+							: accountPending
+								? "Awaiting website approval"
+								: "Sign in with GitHub"
+					}
 					onClick={onToggleAccount}
-					className={`grid h-full w-10 place-items-center rounded-lg hover:bg-white/8 ${accountName ? "text-cyan-200" : "text-slate-400"}`}>
+					className={`grid h-full w-10 justify-center place-items-center rounded-lg hover:bg-white/8 ${accountName ? "text-cyan-200" : "text-slate-400"}`}
+				>
 					<UserRound size={15} />
 				</button>
 				<button

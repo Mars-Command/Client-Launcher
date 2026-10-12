@@ -4,28 +4,16 @@ import {
 	ExternalLink,
 	Lock,
 	LoaderCircle,
-	RefreshCw,
 	ShieldCheck,
 	ShieldX,
 	TriangleAlert,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Panel } from "./Panel";
 import { EM_DASH, formatBytes, formatClock, formatNumber } from "../lib/format";
 import type { PackIntegrityState } from "../hooks/usePackIntegrity";
 import type { FileVerdict, IntegrityReport } from "../types/manifest";
-
-type InstallationRepairStatus = {
-	installedVersion: string;
-	latestVersion: string | null;
-	assetUrl: string | null;
-	releaseUrl: string | null;
-	updateAvailable: boolean;
-	platform: string;
-	message: string | null;
-};
 
 const RELEASES_PAGE_URL =
 	"https://github.com/Mars-Command/Client-Launcher/releases";
@@ -89,55 +77,11 @@ export function DeploymentPanel({
 	installationMessage,
 	launcherOpened,
 	setupLauncherInstallation,
-}: PackIntegrityState) {
-	const [repairStatus, setRepairStatus] =
-		useState<InstallationRepairStatus | null>(null);
-	const [repairChecking, setRepairChecking] = useState(true);
-	const [repairCheckError, setRepairCheckError] = useState<string | null>(
-		null,
-	);
+	onOpenClientUpdates,
+}: PackIntegrityState & { onOpenClientUpdates: () => void }) {
 	const [repairOpenError, setRepairOpenError] = useState<string | null>(
 		null,
 	);
-	const [repairCheckAttempt, setRepairCheckAttempt] = useState(0);
-	const [openingRepair, setOpeningRepair] = useState(false);
-
-	useEffect(() => {
-		let active = true;
-		setRepairChecking(true);
-		setRepairCheckError(null);
-		void invoke<InstallationRepairStatus>(
-			"check_installation_repair",
-		)
-			.then((status) => {
-				if (active) setRepairStatus(status);
-			})
-			.catch((error: unknown) => {
-				if (active) setRepairCheckError(String(error));
-			})
-			.finally(() => {
-				if (active) setRepairChecking(false);
-			});
-		return () => {
-			active = false;
-		};
-	}, [repairCheckAttempt]);
-
-	const openRepairInstaller = async () => {
-		if (!repairStatus?.assetUrl) return;
-		setOpeningRepair(true);
-		setRepairOpenError(null);
-		try {
-			await openUrl(repairStatus.assetUrl);
-		} catch (error) {
-			setRepairOpenError(
-				`Could not open the installer download. Check your default browser, or open the GitHub releases page manually. (${String(error)})`,
-			);
-		} finally {
-			setOpeningRepair(false);
-		}
-	};
-
 	const openReleasesPage = async () => {
 		setRepairOpenError(null);
 		try {
@@ -416,155 +360,34 @@ export function DeploymentPanel({
 						: actionLabel}
 				</button>
 				<div className="mt-2 border-t border-white/8 pt-2">
-					{repairChecking ? (
-						<p className="text-center text-[10px] text-slate-500">
-							Checking for a
-							compatible setup
-							release...
+					<div className="space-y-1.5 text-[10px] text-slate-400">
+						<p>
+							Update the launcher through the signed client
+							update channel in Settings.
 						</p>
-					) : repairCheckError ? (
-						<div className="space-y-1.5 text-[10px] text-amber-200/80">
-							<p role="status">
-								Stable update check
-								failed:{" "}
-								{repairCheckError}
-							</p>
-							<div className="flex items-center gap-3">
-								<button
-									type="button"
-									className="flex items-center gap-1 text-cyan-200 hover:text-cyan-100"
-									onClick={() =>
-										setRepairCheckAttempt(
-											(attempt) =>
-												attempt +
-												1,
-										)
-									}
-									title="Retry the stable release check"
-								>
-									<RefreshCw
-										size={12}
-									/>
-									Retry check
-								</button>
-								<button
-									type="button"
-									className="flex items-center gap-1 text-cyan-200 hover:text-cyan-100"
-									onClick={() =>
-										void openReleasesPage()
-									}
-								>
-									<ExternalLink
-										size={12}
-									/>
-									Open releases page
-								</button>
-							</div>
+						<div className="flex items-center gap-3">
+							<button
+								type="button"
+								onClick={onOpenClientUpdates}
+								className="text-cyan-200 hover:text-cyan-100"
+							>
+								Client updates
+							</button>
+							<button
+								type="button"
+								onClick={() => void openReleasesPage()}
+								className="flex items-center gap-1 text-slate-400 hover:text-slate-200"
+							>
+								<ExternalLink size={12} />
+								Manual downloads
+							</button>
 						</div>
-					) : repairStatus?.updateAvailable &&
-					  repairStatus.assetUrl ? (
-						<div className="rounded-lg border border-amber-300/20 bg-amber-300/5 p-2.5">
-							<div className="flex items-center justify-between gap-2">
-								<div className="min-w-0">
-									<p className="text-[10px] font-semibold tracking-wide text-amber-100">
-										STABLE CLIENT
-										UPDATE AVAILABLE
-									</p>
-									<p className="mt-0.5 text-[10px] text-slate-300">
-										Installed{" "}
-										{
-											repairStatus.installedVersion
-										}{" "}
-										· Stable{" "}
-										{
-											repairStatus.latestVersion
-										}
-										{" "}for{" "}
-										{repairStatus.platform}
-									</p>
-								</div>
-								<button
-									type="button"
-									disabled={
-										openingRepair
-									}
-									onClick={() =>
-										void openRepairInstaller()
-									}
-									className="flex shrink-0 items-center gap-1.5 rounded-md border border-amber-200/25 bg-amber-200/10 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-200/15 disabled:opacity-50"
-									title="Open the stable installer compatible with this platform"
-								>
-									{openingRepair ? (
-										<LoaderCircle
-											size={
-												12
-											}
-											className="animate-spin"
-										/>
-									) : (
-										<ExternalLink
-											size={
-												12
-											}
-										/>
-									)}
-									Open installer
-								</button>
-							</div>
-							<p className="mt-1.5 text-[10px] leading-4 text-slate-400">
-								Choose{" "}
-								<strong>Open installer</strong>{" "}
-								to start the download in your
-								browser. When it finishes,
-								close Mars Command, open the
-								downloaded installer, and
-								follow its prompts. Then
-								relaunch Mars Command. The
-								installer is never run
-								automatically.
-							</p>
-						</div>
-					) : (
-						<div className="space-y-1.5 text-[10px] text-slate-500">
-							<p>
-								{repairStatus?.message ??
-									`Setup build ${repairStatus?.installedVersion ?? ""} is current.`}
-							</p>
-							{repairStatus?.message ? (
-								<div className="flex items-center gap-3">
-									<button
-										type="button"
-										className="flex items-center gap-1 text-cyan-200 hover:text-cyan-100"
-										onClick={() =>
-											setRepairCheckAttempt(
-												(attempt) =>
-													attempt +
-													1,
-											)
-										}
-										title="Retry the stable release check"
-									>
-										<RefreshCw
-											size={12}
-										/>
-										Retry check
-									</button>
-									<button
-										type="button"
-										className="flex items-center gap-1 text-cyan-200 hover:text-cyan-100"
-										onClick={() =>
-											void openReleasesPage()
-										}
-									>
-										<ExternalLink
-											size={12}
-										/>
-										Open releases page
-									</button>
-								</div>
-							) : null}
-						</div>
-					)}
+						<p>
+							Manual downloads open the official releases
+							page; they are not installed or verified by
+							this client.
+						</p>
+					</div>
 					{repairOpenError ? (
 						<p
 							role="alert"

@@ -8,15 +8,21 @@ on:
 permissions:
     contents: read
 
+concurrency:
+    group: mars-client-release
+    cancel-in-progress: false
+
 jobs:
     build:
+        environment: client-release
+        env:
+            MARS_UPDATER_PUBLIC_KEY: ${{ vars.MARS_UPDATER_PUBLIC_KEY }}
         strategy:
             fail-fast: false
             matrix:
                 include:
                     - os: ubuntu-latest
-                      bundle: deb
-                      extension: deb
+                      extension: linux
                     - os: windows-latest
                       bundle: nsis
                       extension: exe
@@ -54,6 +60,19 @@ jobs:
 
             - run: npm ci
 
+            - run: npm run test:updater
+
+            - name: Require updater public key
+              shell: bash
+              run: |
+                  : "${MARS_UPDATER_PUBLIC_KEY:?Set MARS_UPDATER_PUBLIC_KEY in the client-release environment}"
+                  node --input-type=module -e '
+                    import fs from "node:fs";
+                    fs.writeFileSync("src-tauri/updater-release.local.json", JSON.stringify({
+                      plugins: { updater: { pubkey: process.env.MARS_UPDATER_PUBLIC_KEY } }
+                    }));
+                  '
+
             - name: Validate release version
               shell: bash
               run: |
@@ -86,13 +105,30 @@ jobs:
                     }
                   '
 
-            - name: Build Linux package
-              if: runner.os == 'Linux'
-              run: npm run tauri -- build --bundles deb
+            - name: Test native update policy
+              run: cargo test --locked --manifest-path src-tauri/Cargo.toml client_update_policy::tests
 
-            - name: Build Windows installer
+            - name: Build signed Linux packages
+              if: runner.os == 'Linux'
+              env:
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+                  APPIMAGE_EXTRACT_AND_RUN: "1"
+              shell: bash
+              run: |
+                  : "${TAURI_SIGNING_PRIVATE_KEY:?Set the updater signing private key secret}"
+                  npm run tauri -- build --config src-tauri/updater-release.local.json --bundles deb,appimage
+
+            - name: Build signed Windows installer
               if: runner.os == 'Windows'
-              run: npm run tauri -- build --bundles nsis
+              env:
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+              shell: pwsh
+              run: |
+                  if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "Set the updater signing private key secret." }
+                  npm run tauri -- build --config src-tauri/updater-release.local.json --bundles nsis
+                  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
             - name: Stage versioned Linux installer
               if: runner.os == 'Linux'
@@ -103,21 +139,27 @@ jobs:
                   mapfile -t installers < <(find src-tauri/target/release/bundle/deb -maxdepth 1 -type f -name '*.deb')
                   [[ "${#installers[@]}" -eq 1 ]]
                   cp "${installers[0]}" "release-assets/setup-${VERSION}.deb"
+                  mapfile -t images < <(find src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage')
+                  [[ "${#images[@]}" -eq 1 ]]
+                  cp "${images[0]}" "release-assets/mars-command-${VERSION}.AppImage"
+                  cp "${images[0]}.sig" "release-assets/mars-command-${VERSION}.AppImage.sig"
 
             - name: Stage versioned Windows installer
               if: runner.os == 'Windows'
               shell: pwsh
               run: |
                   $version = $env:GITHUB_REF_NAME.Substring("client-v".Length)
-                  $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" | Select-Object -First 1
-                  if ($null -eq $installer) { throw "Tauri did not produce an NSIS setup executable." }
+                  $installers = @(Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe")
+                  if ($installers.Count -ne 1) { throw "Expected exactly one NSIS setup executable." }
+                  $installer = $installers[0]
                   New-Item -ItemType Directory -Force -Path "release-assets" | Out-Null
                   Copy-Item $installer.FullName "release-assets/setup-$version.exe"
+                  Copy-Item "$($installer.FullName).sig" "release-assets/setup-$version.exe.sig"
 
             - uses: actions/upload-artifact@v4
               with:
                   name: client-installer-${{ matrix.extension }}
-                  path: release-assets/setup-*
+                  path: release-assets/*
                   if-no-files-found: error
                   retention-days: 1
 
@@ -127,15 +169,58 @@ jobs:
         permissions:
             contents: write
         steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
             - uses: actions/download-artifact@v4
               with:
                   path: release-assets
                   pattern: client-installer-*
                   merge-multiple: true
 
-            - name: Publish versioned installers
+            - name: Verify release artifacts against the pinned public key
+              env:
+                  MARS_UPDATER_PUBLIC_KEY: ${{ vars.MARS_UPDATER_PUBLIC_KEY }}
+              run: |
+                  set -euo pipefail
+                  : "${MARS_UPDATER_PUBLIC_KEY:?Set the repository updater public key variable}"
+                  sudo apt-get update
+                  sudo apt-get install --no-install-recommends -y minisign
+                  printf '%s' "$MARS_UPDATER_PUBLIC_KEY" | base64 --decode > "$RUNNER_TEMP/updater.pub"
+                  version="${GITHUB_REF_NAME#client-v}"
+                  for asset in "release-assets/setup-${version}.exe" "release-assets/mars-command-${version}.AppImage"; do
+                    base64 --decode "${asset}.sig" > "$RUNNER_TEMP/updater.sig"
+                    minisign -Vm "$asset" -p "$RUNNER_TEMP/updater.pub" -x "$RUNNER_TEMP/updater.sig"
+                  done
+
+            - name: Generate updater manifest
+              run: node scripts/client-update-manifest.mjs release-assets
+
+            - name: Refuse to overwrite a published release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  existing="$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --jq ".[] | select(.tag_name == \"${GITHUB_REF_NAME}\") | .id")"
+                  if [ -n "$existing" ]; then
+                    echo "::error::This release tag already exists. Publish a new version instead of replacing signed assets."
+                    exit 1
+                  fi
+
+            - name: Stage signed release before making it available
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ github.ref_name }}
                   name: Mars Command ${{ github.ref_name }}
-                  files: release-assets/setup-*
+                  draft: true
+                  fail_on_unmatched_files: true
+                  files: release-assets/*
+
+            - name: Publish complete client update channel
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest

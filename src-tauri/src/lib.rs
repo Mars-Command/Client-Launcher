@@ -1,4 +1,6 @@
 mod community;
+mod client_updates;
+mod client_update_policy;
 pub mod community_capsules;
 mod integrity;
 pub mod manifest;
@@ -650,6 +652,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(client_updates::ClientUpdateState::default())
         .manage(ManifestState::default())
         .manage(InstanceMutation::default())
         .manage(community::CommunityState::default())
@@ -660,6 +664,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            client_updates::check_client_update,
+            client_updates::install_client_update,
             community::desktop_login_start,
             community::desktop_login_poll,
             community::desktop_logout,

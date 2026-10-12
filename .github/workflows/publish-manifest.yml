@@ -25,6 +25,8 @@ concurrency:
 jobs:
     publish:
         runs-on: ubuntu-latest
+        env:
+            MARS_UPDATER_PUBLIC_KEY: ${{ vars.MARS_UPDATER_PUBLIC_KEY }}
         steps:
             - uses: actions/checkout@v4
 
@@ -93,6 +95,7 @@ jobs:
                   tag_name: pack-v${{ inputs.pack_version }}-manifest-${{ github.run_number }}
                   name: Mars Pack ${{ inputs.pack_version }}
                   prerelease: ${{ inputs.prerelease }}
+                  make_latest: false
                   files: |
                       manifest-dist/manifest.json
                       manifest-dist/manifest.json.sig

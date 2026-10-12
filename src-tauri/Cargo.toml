@@ -1,9 +1,11 @@
 [package]
 name = "mars-command-client"
+display-name = "Mars Client"
 version = "1.4.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+description = "A client application for managing Mars Command operations"
+authors = ["Jay Nightmare <jn3.enquiries@gmail.com>"]
+edition = "2024"
+rust-version = "1.90"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,6 +18,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+base64 = "0.22"
+minisign-verify = "0.3"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -30,6 +34,9 @@ futures-util = "0.3"
 hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime", "system-config"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "=2.13.3"
+base64 = "0.22"
+minisign-verify = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "charset", "http2", "json", "blocking", "stream"] }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 sha2 = "0.10"
