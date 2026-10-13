@@ -43,8 +43,10 @@ function severityOf(report: IntegrityReport | null): "clean" | "warn" | "bad" {
 			report.corruptCount +
 			report.unreadableCount >
 			0 ||
-		report.modsPresent !== report.modsExpected
-		|| report.personalMods.some((entry) => entry.status !== "installed")
+		report.modsPresent !== report.modsExpected ||
+		report.personalMods.some(
+			(entry) => entry.status !== "installed",
+		)
 	) {
 		return "bad";
 	}
@@ -235,14 +237,43 @@ export function DeploymentPanel({
 				</p>
 				{scanned && report.personalMods.length > 0 ? (
 					<div className="mt-2 text-[10px] leading-4 text-cyan-200">
-						{report.personalMods.length} personal mod(s), unsigned and separate from signed verification. Manage in Settings.
+						{report.personalMods.length}{" "}
+						personal mod(s), unsigned and
+						separate from signed
+						verification. Manage in
+						Settings.
 						<ul className="max-h-24 overflow-y-auto pr-1">
-							{report.personalMods.map((entry) => (
-								<li key={entry.file.fileName} className={entry.status === "installed" ? "" : "text-amber-200"}>
-									{entry.file.fileName}: {entry.status === "installed" ? "local checksum matches" : entry.status}
-									{entry.message ? ` - ${entry.message}` : ""}
-								</li>
-							))}
+							{report.personalMods.map(
+								(entry) => (
+									<li
+										key={
+											entry
+												.file
+												.fileName
+										}
+										className={
+											entry.status ===
+											"installed"
+												? ""
+												: "text-amber-200"
+										}
+									>
+										{
+											entry
+												.file
+												.fileName
+										}
+										:{" "}
+										{entry.status ===
+										"installed"
+											? "local checksum matches"
+											: entry.status}
+										{entry.message
+											? ` - ${entry.message}`
+											: ""}
+									</li>
+								),
+							)}
 						</ul>
 					</div>
 				) : null}
@@ -317,25 +348,31 @@ export function DeploymentPanel({
 					{installationMessage ??
 						(manifest?.error
 							? `Setup is blocked: ${manifest.error}`
-							: installationAction === "launch"
-							? "Mars is current and verified. Launch Minecraft Launcher."
 							: installationAction ===
-								  "update"
-								? "The installation or server manifest changed. Update Mars to continue."
+								  "launch"
+								? "Mars is current and verified. Launch Minecraft Launcher."
 								: installationAction ===
-									  "setup"
-									? "No Mars installation found. Set up an isolated game directory."
-									: verified
-										? "Pack integrity needs attention before launch."
-										: "A trusted signed manifest is required before setup.")}
+									  "update"
+									? "The installation or server manifest changed. Update Mars to continue."
+									: installationAction ===
+										  "setup"
+										? "No Mars installation found. Set up an isolated game directory."
+										: verified
+											? "Pack integrity needs attention before launch."
+											: "A trusted signed manifest is required before setup.")}
 				</p>
 				<button
 					type="button"
-					disabled={!canAct || syncing || personalModBusy}
+					disabled={
+						!canAct ||
+						syncing ||
+						personalModBusy
+					}
 					onClick={setupLauncherInstallation}
 					title={
 						!canAct
-							? manifest?.error ?? "A trusted signed manifest is required."
+							? (manifest?.error ??
+								"A trusted signed manifest is required.")
 							: installationAction ===
 								  "launch"
 								? "Launch the already verified Mars installation."
@@ -364,29 +401,41 @@ export function DeploymentPanel({
 				<div className="mt-2 border-t border-white/8 pt-2">
 					<div className="space-y-1.5 text-[10px] text-slate-400">
 						<p>
-							Update the launcher through the signed client
-							update channel in Settings.
+							Update the launcher
+							through the signed
+							client update channel in
+							Settings.
 						</p>
 						<div className="flex items-center gap-3">
 							<button
 								type="button"
-								onClick={onOpenClientUpdates}
+								onClick={
+									onOpenClientUpdates
+								}
 								className="text-cyan-200 hover:text-cyan-100"
 							>
 								Client updates
 							</button>
 							<button
 								type="button"
-								onClick={() => void openReleasesPage()}
+								onClick={() =>
+									void openReleasesPage()
+								}
 								className="flex items-center gap-1 text-slate-400 hover:text-slate-200"
 							>
-								<ExternalLink size={12} />
+								<ExternalLink
+									size={
+										12
+									}
+								/>
 								Manual downloads
 							</button>
 						</div>
 						<p>
-							Manual downloads open the official releases
-							page; they are not installed or verified by
+							Manual downloads open
+							the official releases
+							page; they are not
+							installed or verified by
 							this client.
 						</p>
 					</div>

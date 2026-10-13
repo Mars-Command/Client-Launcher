@@ -1,6 +1,5 @@
 [package]
 name = "mars-command-client"
-display-name = "Mars Client"
 version = "1.4.2"
 description = "A client application for managing Mars Command operations"
 authors = ["Jay Nightmare <jn3.enquiries@gmail.com>"]

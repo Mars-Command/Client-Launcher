@@ -27,8 +27,7 @@ import {
 import type { PackIntegrityState } from "../hooks/usePackIntegrity";
 
 const PROJECT_URL = "https://mars.nexusgit.info/";
-const REPOSITORY_URL =
-	"https://github.com/Mars-Command/Client-Launcher";
+const REPOSITORY_URL = "https://github.com/Mars-Command/Client-Launcher";
 const ISSUES_URL = `${REPOSITORY_URL}/issues/new`;
 
 type Props = {
@@ -80,7 +79,7 @@ export function SettingsPage({
 					<span className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-200/15 bg-cyan-300/8 text-cyan-200">
 						<Settings2 size={17} />
 					</span>
-					<div>
+					<div className="items-start">
 						<h1 className="text-base font-semibold tracking-wide text-slate-100">
 							Client Settings
 						</h1>
@@ -92,7 +91,14 @@ export function SettingsPage({
 				</header>
 
 				<PersonalModsPanel pack={pack} />
-				<ClientUpdatePanel updater={updater} blocked={pack.busy || pack.syncing || pack.personalModBusy} />
+				<ClientUpdatePanel
+					updater={updater}
+					blocked={
+						pack.busy ||
+						pack.syncing ||
+						pack.personalModBusy
+					}
+				/>
 
 				<div className="grid gap-4 md:grid-cols-2">
 					<Panel
@@ -129,7 +135,11 @@ export function SettingsPage({
 									onClick={
 										pack.chooseInstanceRoot
 									}
-									disabled={pack.personalModBusy || pack.syncing || pack.busy}
+									disabled={
+										pack.personalModBusy ||
+										pack.syncing ||
+										pack.busy
+									}
 									className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/5 px-3 py-2 text-[11px] text-slate-200 transition hover:bg-white/10"
 								>
 									<FolderOpen
@@ -147,7 +157,11 @@ export function SettingsPage({
 										onClick={
 											pack.clearInstanceRoot
 										}
-										disabled={pack.personalModBusy || pack.syncing || pack.busy}
+										disabled={
+											pack.personalModBusy ||
+											pack.syncing ||
+											pack.busy
+										}
 										className="rounded-lg px-3 py-2 text-[11px] text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
 									>
 										Forget
@@ -507,7 +521,9 @@ export function SettingsPage({
 						<button
 							type="button"
 							onClick={onDonate}
-							disabled={donationPending}
+							disabled={
+								donationPending
+							}
 							className="flex items-center gap-2 rounded-lg border border-emerald-300/15 bg-emerald-300/5 px-3 py-2.5 text-left text-[11px] text-emerald-100 transition hover:bg-emerald-300/10"
 						>
 							<Heart size={14} />
@@ -522,9 +538,12 @@ export function SettingsPage({
 						</button>
 					</div>
 					<p className="mt-2 text-[10px] leading-4 text-slate-500">
-						Sign in on the configured website first, then open the configured
-						GitHub Sponsors recipient. Mars Command does not collect payments
-						or grant account roles.
+						Sign in on the configured
+						website first, then open the
+						configured GitHub Sponsors
+						recipient. Mars Command does not
+						collect payments or grant
+						account roles.
 					</p>
 					{actionMessage ? (
 						<p

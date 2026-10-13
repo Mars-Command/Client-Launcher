@@ -68,8 +68,8 @@ export function TitleBar({
 						accountOpen
 							? "Close profile"
 							: accountName
-							? `Account: ${accountName}`
-							: "Open website account login"
+								? `Account: ${accountName}`
+								: "Open website account login"
 					}
 					aria-pressed={accountOpen}
 					title={
