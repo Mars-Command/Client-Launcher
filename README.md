@@ -179,7 +179,7 @@ Run checks:
 npm run build
 npm run test:updater
 npm run test:ui
-python -m unittest discover -s scripts -p test_deploy_pack_release.py
+python -m unittest discover -s scripts -p "test_*.py"
 cd src-tauri
 cargo fmt --check
 cargo test --all-targets
@@ -326,14 +326,38 @@ release and match its manifest's `mods/...` SHA-256 and size. This path preserve
 the signed bytes, avoids CurseForge export conversion, and never overwrites or
 republishes the source release.
 
-For non-prereleases, the workflow stages the signed pair and optional declared
-JAR in `/opt/mars-package-api/releases/1.0.0`. Before any installation it verifies
-**every referenced file**, using the staged payload where provided and existing
-release files otherwise. A missing/modified file fails before changing the
-manifest. It installs the verified payload, replaces the signature first and
-manifest last, then restarts the API and compares both public endpoints
-byte-for-byte with the verified artifacts. Prereleases are not deployed.
-Signature checks use the same compiled public configuration as the launcher.
+For non-prereleases, the workflow publishes through the **HTTPS API**, not SSH.
+`scripts/publish-pack-api.py` reserves the exact signed pair, checks the server's
+upload plan against the manifest, uploads missing declared payloads in at most
+8 MiB chunks, and commits the release. The server verifies every file before
+activating a complete immutable snapshot and automatically refreshes its serving
+indexes. The workflow compares the exact public manifest bytes and canonical hex
+signature afterward.
+Prereleases are not deployed, and neither signature verification nor payload
+hash checks are bypassed.
+
+The backend publishing endpoints need a **one-time server code/dependency update
+and restart** before this workflow can use them. Configure its separate
+`MARS_RELEASE_DEPLOY_TOKEN`, trusted `MARS_RELEASE_PUBLIC_KEY`, and persistent
+publishing directory. The new deployment token belongs only in server/Actions
+secrets—never `.env.prod`, `config/production.env`, the client bundle, or URLs.
+The workflow cannot upload backend code or bootstrap the endpoint itself.
+
+Set the public Actions variable `MARS_RELEASE_PUBLISH_URL` to the API **origin**
+(default `https://api.nexusgit.info`, without `/api`). The server's existing
+HTTP Cloudflare Tunnel is sufficient; no `cloudflared access ssh` process or
+inbound SSH connection is needed. If Cloudflare Access protects only the
+deployment path, configure a **Service Auth** policy and the optional Actions
+secrets `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`. Both are supplied
+as HTTP headers by the publishing client; the backend token is still required.
+
+Payload lookup uses the `release-payload` directory (downloaded release JARs are
+placed under `mods/`) and the selected export's `overrides` directory.
+If a file is neither present with the right hash on the API nor available
+locally, publication stops instead of installing an incomplete pack.
+Retries resume the same signed deployment; the default staging expiry is one
+hour. Published snapshots remain available to requests until operators prune
+them safely.
 
 Configure these repository Actions secrets:
 
@@ -341,17 +365,30 @@ Configure these repository Actions secrets:
 | --- | --- |
 | `CURSEFORGE_API_KEY` | Approved Core API key used to resolve export metadata. |
 | `MARS_SIGNING_KEY` | Ed25519 private key used to sign the manifest. |
-| `MARS_DEPLOY_HOST` | SSH hostname of the Mars API server. |
-| `MARS_DEPLOY_USER` | Dedicated SSH user allowed to deploy to the release directory. |
-| `MARS_DEPLOY_SSH_KEY` | Private SSH deploy key. |
-| `MARS_DEPLOY_KNOWN_HOSTS` | Pinned `known_hosts` entry for the server; do not discover it during the workflow. |
+| `MARS_RELEASE_DEPLOY_TOKEN` | Separate secret shared only with the backend pack publishing service. |
+| `CF_ACCESS_CLIENT_ID` | Optional Cloudflare Access service-token ID for the HTTPS deployment path. |
+| `CF_ACCESS_CLIENT_SECRET` | Matching optional Cloudflare Access service-token secret. |
 
-The deploy user needs Python 3.10+, permission to create a run-specific staging
-directory and replace files in the release directory, and access to
-`sudo -n systemctl restart mars-package-api`. The restart reloads the API's
-cached release-file inventory. Keep the SSH key limited to deployment use.
-The API server does not receive the manifest signing key or CurseForge API key.
-The workflow serializes releases so two deployments cannot overwrite each other.
+The `MARS_DEPLOY_HOST`, `MARS_DEPLOY_USER`, `MARS_DEPLOY_SSH_KEY`, and
+`MARS_DEPLOY_KNOWN_HOSTS` secrets are no longer read by this workflow.
+The API service account needs write access only to its publishing storage,
+not permission to run `sudo` or deployment commands. The server never receives
+the manifest private key or CurseForge API key. The existing Actions concurrency
+group and backend activation fence serialize competing publications.
+
+Manual maintainer publishing (from this repository, with the deployment token
+in the process environment):
+
+```powershell
+python scripts\publish-pack-api.py `
+  --api-origin "https://api.nexusgit.info" `
+  --manifest "manifest-dist\manifest.json" `
+  --signature "manifest-dist\manifest.json.sig" `
+  --payload-root "modpack\Mars-Client-1.2.4\Mars Client"
+```
+
+The previous `deploy-pack-release.py` remains a local maintenance utility only;
+Actions no longer sends it to the server or invokes it remotely.
 
 ## Security
 

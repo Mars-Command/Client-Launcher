@@ -38,8 +38,8 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: Test staged payload deployment
-              run: python3 -m unittest discover -s scripts -p test_deploy_pack_release.py
+            - name: Test HTTPS publishing client
+              run: python3 -m unittest discover -s scripts -p test_publish_pack_api.py
 
             - name: Download existing signed pack
               if: ${{ inputs.source_release != '' }}
@@ -68,9 +68,9 @@ jobs:
                   PY
                   if [[ -n "$PAYLOAD_ASSET" ]]; then
                     [[ "$PAYLOAD_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$ ]]
-                    mkdir -p release-payload
+                    mkdir -p release-payload/mods
                     gh release download "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" \
-                      --pattern "$PAYLOAD_ASSET" --dir release-payload
+                      --pattern "$PAYLOAD_ASSET" --dir release-payload/mods
                     python3 - <<'PY'
                   import hashlib, json, os
                   from pathlib import Path
@@ -79,7 +79,7 @@ jobs:
                   matches = [entry for entry in entries if entry["path"] == "mods/" + name]
                   assert len(matches) == 1, "Payload must be declared exactly once"
                   entry = matches[0]
-                  path = Path("release-payload") / name
+                  path = Path("release-payload/mods") / name
                   assert path.stat().st_size <= 64 * 1024 * 1024, "Payload exceeds 64 MiB"
                   assert path.stat().st_size == entry["size"], "Payload size differs"
                   assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"], "Payload hash differs"
@@ -159,87 +159,20 @@ jobs:
                       manifest-dist/manifest.json
                       manifest-dist/manifest.json.sig
 
-            - name: Deploy signed manifest to Mars API
+            - name: Publish verified pack through the HTTPS API
               if: ${{ inputs.prerelease == false }}
               env:
-                  MARS_DEPLOY_HOST: ${{ secrets.MARS_DEPLOY_HOST }}
-                  MARS_DEPLOY_USER: ${{ secrets.MARS_DEPLOY_USER }}
-                  MARS_DEPLOY_SSH_KEY: ${{ secrets.MARS_DEPLOY_SSH_KEY }}
-                  MARS_DEPLOY_KNOWN_HOSTS: ${{ secrets.MARS_DEPLOY_KNOWN_HOSTS }}
-                  PAYLOAD_ASSET: ${{ inputs.payload_asset }}
+                  MARS_RELEASE_DEPLOY_TOKEN: ${{ secrets.MARS_RELEASE_DEPLOY_TOKEN }}
+                  MARS_RELEASE_PUBLISH_URL: ${{ vars.MARS_RELEASE_PUBLISH_URL || 'https://api.nexusgit.info' }}
+                  CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+                  CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+                  EXPORT_DIR: ${{ inputs.export_dir }}
               run: |
                   set -euo pipefail
-                  : "${MARS_DEPLOY_HOST:?MARS_DEPLOY_HOST secret is not set}"
-                  : "${MARS_DEPLOY_USER:?MARS_DEPLOY_USER secret is not set}"
-                  : "${MARS_DEPLOY_SSH_KEY:?MARS_DEPLOY_SSH_KEY secret is not set}"
-                  : "${MARS_DEPLOY_KNOWN_HOSTS:?MARS_DEPLOY_KNOWN_HOSTS secret is not set}"
-
-                  RELEASE_DIR="/opt/mars-package-api/releases/1.0.0"
-                  RUN_SUFFIX="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-                  STAGING_DIR="${RELEASE_DIR}/.incoming-${RUN_SUFFIX}"
-                  REMOTE="${MARS_DEPLOY_USER}@${MARS_DEPLOY_HOST}"
-                  KEY_FILE="$(mktemp)"
-                  KNOWN_HOSTS_FILE="$(mktemp)"
-                  cleanup() {
-                    ssh -i "$KEY_FILE" -p 22 \
-                      -o IdentitiesOnly=yes \
-                      -o BatchMode=yes \
-                      -o StrictHostKeyChecking=yes \
-                      -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
-                      "$REMOTE" "rm -rf '$STAGING_DIR'" >/dev/null 2>&1 || true
-                    rm -f "$KEY_FILE" "$KNOWN_HOSTS_FILE" \
-                      "${REMOTE_MANIFEST:-}" "${REMOTE_SIGNATURE:-}"
-                  }
-                  trap cleanup EXIT
-
-                  printf '%s\n' "$MARS_DEPLOY_SSH_KEY" > "$KEY_FILE"
-                  printf '%s\n' "$MARS_DEPLOY_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
-                  chmod 600 "$KEY_FILE" "$KNOWN_HOSTS_FILE"
-
-                  SSH_ARGS=(
-                    -i "$KEY_FILE"
-                    -p 22
-                    -o IdentitiesOnly=yes
-                    -o BatchMode=yes
-                    -o StrictHostKeyChecking=yes
-                    -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE"
-                    -o ConnectTimeout=15
-                  )
-                  ssh "${SSH_ARGS[@]}" "$REMOTE" "mkdir -p '$STAGING_DIR'"
-                  scp -i "$KEY_FILE" -P 22 \
-                    -o IdentitiesOnly=yes \
-                    -o BatchMode=yes \
-                    -o StrictHostKeyChecking=yes \
-                    -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
-                    manifest-dist/manifest.json \
-                    manifest-dist/manifest.json.sig \
-                    "${REMOTE}:${STAGING_DIR}/"
-
-                  if [[ -n "$PAYLOAD_ASSET" ]]; then
-                    [[ "$PAYLOAD_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$ ]]
-                    ssh "${SSH_ARGS[@]}" "$REMOTE" "mkdir -p '$STAGING_DIR/mods'"
-                    scp -i "$KEY_FILE" -P 22 \
-                      -o IdentitiesOnly=yes \
-                      -o BatchMode=yes \
-                      -o StrictHostKeyChecking=yes \
-                      -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
-                      "release-payload/$PAYLOAD_ASSET" "${REMOTE}:${STAGING_DIR}/mods/"
-                  fi
-
-                  ssh "${SSH_ARGS[@]}" "$REMOTE" \
-                    "python3 - '$RELEASE_DIR' '$STAGING_DIR' '$RUN_SUFFIX'" < scripts/deploy-pack-release.py
-                  ssh "${SSH_ARGS[@]}" "$REMOTE" \
-                    "sudo -n systemctl restart mars-package-api"
-
-                  REMOTE_MANIFEST="$(mktemp)"
-                  REMOTE_SIGNATURE="$(mktemp)"
-                  curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-                    -H 'Cache-Control: no-cache' \
-                    "https://api.nexusgit.info/api/v1/manifest.json?deploy=${RUN_SUFFIX}" \
-                    --output "$REMOTE_MANIFEST"
-                  curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-                    -H 'Cache-Control: no-cache' \
-                    "https://api.nexusgit.info/api/v1/manifest.json.sig?deploy=${RUN_SUFFIX}" \
-                    --output "$REMOTE_SIGNATURE"
-                  cmp manifest-dist/manifest.json "$REMOTE_MANIFEST"
-                  cmp manifest-dist/manifest.json.sig "$REMOTE_SIGNATURE"
+                  : "${MARS_RELEASE_DEPLOY_TOKEN:?Set the separate release deployment secret}"
+                  python3 scripts/publish-pack-api.py \
+                    --api-origin "$MARS_RELEASE_PUBLISH_URL" \
+                    --manifest manifest-dist/manifest.json \
+                    --signature manifest-dist/manifest.json.sig \
+                    --payload-root release-payload \
+                    --payload-root "$EXPORT_DIR/overrides"
