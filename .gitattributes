@@ -1,0 +1,2 @@
+# Signatures bind exact bytes; do not normalize signed fixtures on checkout or commit.
+src-tauri/tests/fixtures/pack-key-1.4.1.json -text whitespace=cr-at-eol
