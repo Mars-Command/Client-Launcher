@@ -8,12 +8,14 @@ export function TitleBar({
 	onToggleSettings,
 	accountName,
 	accountPending,
+	accountOpen,
 	onToggleAccount,
 }: {
 	settingsOpen: boolean;
 	onToggleSettings: () => void;
 	accountName?: string;
 	accountPending: boolean;
+	accountOpen: boolean;
 	onToggleAccount: () => void;
 }) {
 	// `data-tauri-drag-region` only matches the exact event target, so child
@@ -63,10 +65,13 @@ export function TitleBar({
 				<button
 					type="button"
 					aria-label={
-						accountName
+						accountOpen
+							? "Close profile"
+							: accountName
 							? `Account: ${accountName}`
 							: "Open website account login"
 					}
+					aria-pressed={accountOpen}
 					title={
 						accountName
 							? `Signed in: ${accountName}`
@@ -75,7 +80,7 @@ export function TitleBar({
 								: "Sign in with GitHub"
 					}
 					onClick={onToggleAccount}
-					className={`grid h-full w-10 justify-center place-items-center rounded-lg hover:bg-white/8 ${accountName ? "text-cyan-200" : "text-slate-400"}`}
+					className={`grid h-full w-10 justify-center place-items-center rounded-lg hover:bg-white/8 ${accountName || accountOpen ? "text-cyan-200" : "text-slate-400"}`}
 				>
 					<UserRound size={15} />
 				</button>

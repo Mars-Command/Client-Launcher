@@ -17,7 +17,6 @@ jobs:
         environment: client-release
         env:
             MARS_UPDATER_PUBLIC_KEY: ${{ vars.MARS_UPDATER_PUBLIC_KEY }}
-            MARS_MANIFEST_PUBLIC_KEY: a88e7dc70a1227cbc3decac967664e3bea75da9d72550e14f2c6a4ea8118391e
         strategy:
             fail-fast: false
             matrix:
@@ -62,6 +61,8 @@ jobs:
             - run: npm ci
 
             - run: npm run test:updater
+
+            - run: npm run test:ui
 
             - name: Require updater public key
               shell: bash
@@ -110,7 +111,9 @@ jobs:
               run: cargo test --locked --manifest-path src-tauri/Cargo.toml client_update_policy::tests
 
             - name: Test pack manifest signing key
-              run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib manifest::tests
+              run: |
+                  cargo test --locked --manifest-path src-tauri/Cargo.toml --lib manifest::tests
+                  cargo test --locked --manifest-path src-tauri/Cargo.toml --test build_configuration
 
             - name: Build signed Linux packages
               if: runner.os == 'Linux'

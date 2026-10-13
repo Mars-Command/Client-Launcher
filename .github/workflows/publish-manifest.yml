@@ -10,6 +10,14 @@ on:
                 description: "Repository path containing the small CurseForge manifest.json (overrides optional)"
                 required: true
                 default: "modpack/Mars"
+            source_release:
+                description: "Optional existing release tag containing an already signed manifest pair"
+                required: false
+                default: ""
+            payload_asset:
+                description: "Optional JAR asset in that release, installed under mods after hash verification"
+                required: false
+                default: ""
             prerelease:
                 description: "Publish as a pre-release (not served to users)"
                 type: boolean
@@ -29,6 +37,54 @@ jobs:
             MARS_UPDATER_PUBLIC_KEY: ${{ vars.MARS_UPDATER_PUBLIC_KEY }}
         steps:
             - uses: actions/checkout@v4
+
+            - name: Test staged payload deployment
+              run: python3 -m unittest discover -s scripts -p test_deploy_pack_release.py
+
+            - name: Download existing signed pack
+              if: ${{ inputs.source_release != '' }}
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  SOURCE_RELEASE: ${{ inputs.source_release }}
+                  PACK_VERSION: ${{ inputs.pack_version }}
+                  PAYLOAD_ASSET: ${{ inputs.payload_asset }}
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  [[ "$SOURCE_RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]
+                  [[ "$PACK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+                  mkdir -p manifest-dist
+                  gh release download "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" \
+                    --pattern manifest.json --pattern manifest.json.sig --dir manifest-dist
+                  python3 - <<'PY'
+                  import json, os
+                  from pathlib import Path
+                  path = Path("manifest-dist/manifest.json")
+                  assert path.stat().st_size <= 8 * 1024 * 1024, "Manifest exceeds 8 MiB"
+                  manifest = json.loads(path.read_text(encoding="utf-8"))
+                  assert manifest["packVersion"] == os.environ["PACK_VERSION"], "Pack version differs"
+                  assert manifest["minecraftVersion"] == "1.21.1", "Minecraft version differs"
+                  assert manifest["loader"] == "neoforge" and manifest["loaderVersion"] == "21.1.250", "Loader differs"
+                  PY
+                  if [[ -n "$PAYLOAD_ASSET" ]]; then
+                    [[ "$PAYLOAD_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$ ]]
+                    mkdir -p release-payload
+                    gh release download "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" \
+                      --pattern "$PAYLOAD_ASSET" --dir release-payload
+                    python3 - <<'PY'
+                  import hashlib, json, os
+                  from pathlib import Path
+                  name = os.environ["PAYLOAD_ASSET"]
+                  entries = json.loads(Path("manifest-dist/manifest.json").read_text(encoding="utf-8"))["files"]
+                  matches = [entry for entry in entries if entry["path"] == "mods/" + name]
+                  assert len(matches) == 1, "Payload must be declared exactly once"
+                  entry = matches[0]
+                  path = Path("release-payload") / name
+                  assert path.stat().st_size <= 64 * 1024 * 1024, "Payload exceeds 64 MiB"
+                  assert path.stat().st_size == entry["size"], "Payload size differs"
+                  assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"], "Payload hash differs"
+                  PY
+                  fi
 
             - uses: dtolnay/rust-toolchain@stable
 
@@ -53,6 +109,7 @@ jobs:
                   workspaces: src-tauri
 
             - name: Build manifest from CurseForge export
+              if: ${{ inputs.source_release == '' }}
               working-directory: src-tauri
               env:
                   CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
@@ -72,6 +129,7 @@ jobs:
                     ../manifest-dist/manifest.json
 
             - name: Sign manifest
+              if: ${{ inputs.source_release == '' }}
               working-directory: src-tauri
               env:
                   MARS_SIGNING_KEY: ${{ secrets.MARS_SIGNING_KEY }}
@@ -90,6 +148,7 @@ jobs:
               run: cargo run --release --example manifest_tool -- verify ../manifest-dist/manifest.json
 
             - name: Publish release
+              if: ${{ inputs.source_release == '' }}
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: pack-v${{ inputs.pack_version }}-manifest-${{ github.run_number }}
@@ -107,6 +166,7 @@ jobs:
                   MARS_DEPLOY_USER: ${{ secrets.MARS_DEPLOY_USER }}
                   MARS_DEPLOY_SSH_KEY: ${{ secrets.MARS_DEPLOY_SSH_KEY }}
                   MARS_DEPLOY_KNOWN_HOSTS: ${{ secrets.MARS_DEPLOY_KNOWN_HOSTS }}
+                  PAYLOAD_ASSET: ${{ inputs.payload_asset }}
               run: |
                   set -euo pipefail
                   : "${MARS_DEPLOY_HOST:?MARS_DEPLOY_HOST secret is not set}"
@@ -155,11 +215,19 @@ jobs:
                     manifest-dist/manifest.json.sig \
                     "${REMOTE}:${STAGING_DIR}/"
 
+                  if [[ -n "$PAYLOAD_ASSET" ]]; then
+                    [[ "$PAYLOAD_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$ ]]
+                    ssh "${SSH_ARGS[@]}" "$REMOTE" "mkdir -p '$STAGING_DIR/mods'"
+                    scp -i "$KEY_FILE" -P 22 \
+                      -o IdentitiesOnly=yes \
+                      -o BatchMode=yes \
+                      -o StrictHostKeyChecking=yes \
+                      -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" \
+                      "release-payload/$PAYLOAD_ASSET" "${REMOTE}:${STAGING_DIR}/mods/"
+                  fi
+
                   ssh "${SSH_ARGS[@]}" "$REMOTE" \
-                    "install -m 0644 '$STAGING_DIR/manifest.json.sig' '$RELEASE_DIR/.manifest.json.sig.next-${RUN_SUFFIX}' && \
-                     install -m 0644 '$STAGING_DIR/manifest.json' '$RELEASE_DIR/.manifest.json.next-${RUN_SUFFIX}' && \
-                     mv -f '$RELEASE_DIR/.manifest.json.sig.next-${RUN_SUFFIX}' '$RELEASE_DIR/manifest.json.sig' && \
-                     mv -f '$RELEASE_DIR/.manifest.json.next-${RUN_SUFFIX}' '$RELEASE_DIR/manifest.json'"
+                    "python3 - '$RELEASE_DIR' '$STAGING_DIR' '$RUN_SUFFIX'" < scripts/deploy-pack-release.py
                   ssh "${SSH_ARGS[@]}" "$REMOTE" \
                     "sudo -n systemctl restart mars-package-api"
 

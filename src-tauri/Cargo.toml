@@ -1,7 +1,7 @@
 [package]
 name = "mars-command-client"
 display-name = "Mars Client"
-version = "1.4.1"
+version = "1.4.2"
 description = "A client application for managing Mars Command operations"
 authors = ["Jay Nightmare <jn3.enquiries@gmail.com>"]
 edition = "2024"
@@ -20,6 +20,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 base64 = "0.22"
 minisign-verify = "0.3"
+dotenvy = "0.15"
+url = "2"
 
 [dependencies]
 tauri = { version = "2", features = [] }

@@ -1,36 +1,35 @@
+mod build_config;
+
 fn main() {
-    use base64::Engine;
+    let manifest_dir = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest root"),
+    );
+    let release = std::env::var("PROFILE").as_deref() == Ok("release");
+    let defaults_path = manifest_dir.join("config/production.env");
+    let local_path = manifest_dir
+        .parent()
+        .expect("Client repository root")
+        .join(if release { ".env.prod" } else { ".env.dev" });
 
-    println!("cargo:rerun-if-env-changed=MARS_UPDATER_PUBLIC_KEY");
-    let public_key = std::env::var("MARS_UPDATER_PUBLIC_KEY").unwrap_or_default();
-    if public_key.trim().is_empty() {
-        assert!(
-            std::env::var("PROFILE").as_deref() != Ok("release"),
-            "Release builds require MARS_UPDATER_PUBLIC_KEY. Never ship an updater without its pinned verification key."
-        );
-    } else {
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(public_key.trim())
-            .expect("MARS_UPDATER_PUBLIC_KEY must be the base64 contents of the Tauri .pub file");
-        let decoded =
-            std::str::from_utf8(&decoded).expect("Updater public key must decode to text");
-        minisign_verify::PublicKey::decode(decoded).expect("Invalid updater public key");
-        println!(
-            "cargo:rustc-env=MARS_UPDATER_PUBLIC_KEY={}",
-            public_key.trim()
-        );
-    }
-
-    // Public deployment configuration only; never embed desktop/provider tokens.
-    for key in [
-        "MARS_COMMUNITY_API_BASE",
-        "MARS_WEBSITE_BASE",
-        "MARS_SPONSORS_URL",
-    ] {
+    println!("cargo:rerun-if-changed={}", defaults_path.display());
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    let defaults =
+        build_config::read_public_file(&defaults_path, true).expect("Public production defaults");
+    let local = build_config::read_public_file(&local_path, false).expect("Local public overrides");
+    let mut environment = std::collections::BTreeMap::new();
+    for key in build_config::PUBLIC_KEYS
+        .into_iter()
+        .chain([build_config::LEGACY_API_KEY])
+    {
         println!("cargo:rerun-if-env-changed={key}");
         if let Ok(value) = std::env::var(key) {
-            println!("cargo:rustc-env={key}={value}");
+            environment.insert(key.to_string(), value);
         }
+    }
+    let values = build_config::resolve_public_config(&defaults, &local, &environment, release)
+        .expect("Invalid public client build configuration");
+    for (key, value) in values {
+        println!("cargo:rustc-env={key}={value}");
     }
     tauri_build::build()
 }

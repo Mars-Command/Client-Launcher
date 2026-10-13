@@ -315,7 +315,9 @@ export function DeploymentPanel({
 					}`}
 				>
 					{installationMessage ??
-						(installationAction === "launch"
+						(manifest?.error
+							? `Setup is blocked: ${manifest.error}`
+							: installationAction === "launch"
 							? "Mars is current and verified. Launch Minecraft Launcher."
 							: installationAction ===
 								  "update"
@@ -333,7 +335,7 @@ export function DeploymentPanel({
 					onClick={setupLauncherInstallation}
 					title={
 						!canAct
-							? "A trusted signed manifest is required."
+							? manifest?.error ?? "A trusted signed manifest is required."
 							: installationAction ===
 								  "launch"
 								? "Launch the already verified Mars installation."

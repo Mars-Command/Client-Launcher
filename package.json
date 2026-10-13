@@ -11,13 +11,14 @@
 		"url": "https://github.com/Mars-Command/Client-Launcher.git"
 	},
 	"private": true,
-	"version": "1.4.1",
+	"version": "1.4.2",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build",
 		"test:community": "node --test src/lib/accountErrors.test.mjs src/lib/communityValidation.test.mjs src/lib/capsuleValidation.test.mjs",
 		"test:updater": "node --test scripts/client-update-manifest.test.mjs",
+		"test:ui": "vitest run",
 		"preview": "vite preview",
 		"tauri": "tauri"
 	},
@@ -40,6 +41,8 @@
 		"@vitejs/plugin-react": "^6.0.2",
 		"tailwindcss": "^4.3.3",
 		"typescript": "~6.0.3",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^5.0.2",
+		"jsdom": "^30.1.2"
 	}
 }

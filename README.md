@@ -81,17 +81,19 @@ Personal mod management requires a trusted signed manifest. Remote storage, subm
 
 ### Website accounts and community metadata (Batch 2 release candidate)
 
-The title-bar account icon opens account controls. **Sign in on website** starts a desktop device request through the Rust backend and opens the configured website using the existing Tauri opener. GitHub OAuth and explicit desktop identity approval happen on the website. The backend polls the approved device request; no desktop callback protocol is registered or invented. Expiry, denial, cancellation, browser failures, malformed replies, and network/configuration failures are surfaced. Cancelling or signing out clears desktop secrets and ignores late approvals.
+The title-bar account icon opens a dedicated **Your Profile** page, replacing the dashboard/community/settings content rather than appending a card above it. Closing the profile returns to the previous section. Login/session state stays mounted when navigating. **Sign in on website** starts a desktop device request through the Rust backend and opens the configured website using the existing Tauri opener. GitHub OAuth and explicit desktop identity approval happen on the website. The backend polls the approved device request; no desktop callback protocol is registered or invented. Expiry, denial, cancellation, browser failures, malformed replies, and network/configuration failures are surfaced. Cancelling or signing out clears desktop secrets and ignores late approvals.
 
 The access token and secret device code stay in Rust process memory, never localStorage, plaintext config, browser URLs, logs, or frontend IPC responses. **Persistent login is not implemented**: restart requires sign-in. The server owns token expiry; authenticated HTTP 401 responses clear the desktop session and prompt sign-in. The website's session is independent. Pack authentication is unchanged.
 
 The reachable **Community** tab browses/searches public profile names/descriptions case-insensitively (server-side) without sign-in. Signed-in users can create private drafts, edit/delete their private profiles, copy public metadata into independent personal profiles, and explicitly submit non-empty drafts. Backend ownership/visibility/role enforcement remains authoritative. Mod entries are only metadata: copying/saving never installs JARs, certifies checksums, or pretends a malware scan completed. Submission in this batch is expected to fail closed with HTTP 409 `scanning_not_configured`. Real verified community file download/install and scanning/upload contracts remain outside batch 1; existing local Personal Mods remains available.
 
-Set public deployment variables in the **Rust build environment** (compiled into installers), or export them in the desktop process environment during development. `.env.example` documents their names; account commands do not automatically load `.env`.
+Public deployment settings are **compiled into the native installers**, not attached as a dotenv file. `src-tauri/config/production.env` contains the versioned, public-only defaults used in clean GitHub Actions checkouts. Local debug builds override them from `.env.dev`; local release builds use `.env.prod`. Explicit Rust build-process variables take precedence over both. `.env.example` documents the allowlisted names. Installed clients need no external env file.
 
-- `MARS_COMMUNITY_API_BASE`: explicit server origin/base **without `/api`**. The backend appends `api/auth/desktop`, `api/auth/desktop/poll`, and `api/community/profiles` (plus `/mine`, `/{id}`, `/{id}/submit`). No live API origin is assumed. HTTPS is required except local loopback HTTP.
+The loader emits only the six approved `MARS_*` public settings. It does not emit `JWT_SECRET`, provider/device credentials, private signing keys, or dotenv `TAURI_ENV_DEBUG` flags. Malformed files/keys/URLs fail the build without logging configuration values. Never commit private dotenv files; change the public defaults or protected CI public variables when preparing a deployment. Runtime process overrides for community URLs remain available during development.
+
+- `MARS_COMMUNITY_API_BASE`: server origin/base **without `/api`**. The backend appends `api/auth/desktop`, `api/auth/desktop/poll`, and `api/community/profiles` (plus `/mine`, `/{id}`, `/{id}/submit`). The production origin is explicit in the versioned public configuration. HTTPS is required except local loopback HTTP.
 - `MARS_WEBSITE_BASE`: explicit website origin/base. The returned verification URI must be same-origin, target `<base>/auth/login`, and contain only the matching `requestId` query parameter, never the secret device code. Website OAuth callback may retain `requestId` with `authResult=success` or `authResult=error` and a safe enumerated `errorCode`; callbacks belong to the website, not this client.
-- `MARS_SPONSORS_URL`: explicit `https://github.com/sponsors/<recipient>`; no recipient is assumed. Missing/invalid configuration is an error, not a silent fallback.
+- `MARS_SPONSORS_URL`: explicit `https://github.com/sponsors/<recipient>` from the public configuration. An empty override deliberately disables sponsorship navigation; invalid values fail validation.
 
 Desktop community calls use the returned Bearer token, independently of existing signed-pack requests. Profile PATCH is partial and rejects null name/description/mods. Network/configuration errors are not displayed as empty profile lists.
 
@@ -142,6 +144,12 @@ Tauri/Minisign launcher-updater key; neither private key is included in the app.
 Clients built with the older pack key need to update the launcher before they
 can verify manifests signed by the new key.
 
+Client **1.4.2** moves profile controls onto their own page and fixes native
+production configuration loading, including account API/website settings in
+clean CI builds. The manifest trust gate remains strict: a server still serving
+an old-key manifest must deploy the corresponding newly signed pack; missing
+configuration is not repaired by disabling verification or trusting an extra key.
+
 The in-app client update check uses stable, non-prerelease GitHub releases and selects the newest installer compatible with the current platform: `setup-X.Y.Z.exe` on Windows or `setup-X.Y.Z.deb` on Linux. For older releases it also accepts `setup.exe` or `setup.deb` when the release tag contains a valid version; a versioned asset is preferred when both names are published. Drafts, prereleases, unsupported platforms, and assets for another platform are not offered.
 
 When an update is available, choose **Open installer** to open its download in your browser. After it finishes, close Mars Command, open the downloaded installer, follow its prompts, and relaunch Mars Command. No installer runs or installs silently. If the release check cannot reach GitHub, retry after checking your connection or open the [GitHub releases page](https://github.com/Mars-Command/Client-Launcher/releases). If no compatible stable asset is published, check that page for `setup-X.Y.Z.exe` or `setup-X.Y.Z.deb` (or the legacy generic name), then retry the check later.
@@ -170,6 +178,8 @@ Run checks:
 ```powershell
 npm run build
 npm run test:updater
+npm run test:ui
+python -m unittest discover -s scripts -p test_deploy_pack_release.py
 cd src-tauri
 cargo fmt --check
 cargo test --all-targets
@@ -187,7 +197,16 @@ $updaterConfig = @{ plugins = @{ updater = @{ pubkey = $env:MARS_UPDATER_PUBLIC_
 npm run tauri -- build --config $updaterConfig
 ```
 
-`MARS_MANIFEST_BASE_URL` and `MARS_MANIFEST_PUBLIC_KEY` are compile-time overrides. Rust `option_env!` does not automatically read `.env`. `MARS_UPDATER_PUBLIC_KEY` must be exported to the build environment; release builds reject a missing or invalid key. Debug builds without a key explicitly report that updates are disabled. The signing private key is read by the Tauri bundler, never embedded in the client. On Linux, install the Tauri prerequisites and build `--bundles deb,appimage` with the same signing variables and public-key config override. Bundles are written under `src-tauri/target/release/bundle/`.
+The Rust build script resolves and validates `MARS_MANIFEST_BASE_URL`,
+`MARS_MANIFEST_PUBLIC_KEY`, `MARS_UPDATER_PUBLIC_KEY`, and community settings
+from the public configuration layers above. Changing a selected dotenv file
+or an explicit variable triggers rebuilding. Legacy `MARS_COMMAND_API_URL`
+accepts the API origin or `/api/v1` base and maps to the manifest base; it is
+not embedded under its legacy name. The private signing key is read only by
+the Tauri bundler, never embedded in the client. On Linux, install the Tauri
+prerequisites and build `--bundles deb,appimage` with the same signing variables
+and public-key config override. Bundles are written under
+`src-tauri/target/release/bundle/`.
 
 Before public distribution, use a production keypair whose public key is embedded in the client, and code-sign the Windows installer if you want to reduce SmartScreen warnings. Never ship the private signing key or an API JWT in the app.
 
@@ -299,7 +318,22 @@ cargo run --manifest-path src-tauri/Cargo.toml --release --example manifest_tool
 
 ### Automatic API deployment
 
-The **Publish pack manifest** workflow publishes a GitHub release and, for non-prereleases, deploys `manifest.json` and `manifest.json.sig` to `/opt/mars-package-api/releases/1.0.0`. It stages both files, replaces the signature first and the manifest last, then fetches both public API URLs and compares them byte-for-byte with the build artifacts. Prereleases are not deployed to the live API.
+The **Publish pack manifest** workflow can generate a CurseForge-based release
+or deploy an **already-signed release**. For recovery of pack 1.2.5, select
+`pack_version=1.2.5`, `source_release=v1.2.5`, and
+`payload_asset=mars-command-mod-0.4.0.jar`. The JAR must be attached to that
+release and match its manifest's `mods/...` SHA-256 and size. This path preserves
+the signed bytes, avoids CurseForge export conversion, and never overwrites or
+republishes the source release.
+
+For non-prereleases, the workflow stages the signed pair and optional declared
+JAR in `/opt/mars-package-api/releases/1.0.0`. Before any installation it verifies
+**every referenced file**, using the staged payload where provided and existing
+release files otherwise. A missing/modified file fails before changing the
+manifest. It installs the verified payload, replaces the signature first and
+manifest last, then restarts the API and compares both public endpoints
+byte-for-byte with the verified artifacts. Prereleases are not deployed.
+Signature checks use the same compiled public configuration as the launcher.
 
 Configure these repository Actions secrets:
 
@@ -312,7 +346,12 @@ Configure these repository Actions secrets:
 | `MARS_DEPLOY_SSH_KEY` | Private SSH deploy key. |
 | `MARS_DEPLOY_KNOWN_HOSTS` | Pinned `known_hosts` entry for the server; do not discover it during the workflow. |
 
-The deploy user must be able to create a run-specific staging directory, replace files in the release directory, and run `sudo -n systemctl restart mars-package-api`. The restart reloads the API's cached release-file inventory. Keep the SSH key limited to deployment use. The API server does not receive the manifest signing key or CurseForge API key. The workflow serializes releases so two deployments cannot overwrite each other.
+The deploy user needs Python 3.10+, permission to create a run-specific staging
+directory and replace files in the release directory, and access to
+`sudo -n systemctl restart mars-package-api`. The restart reloads the API's
+cached release-file inventory. Keep the SSH key limited to deployment use.
+The API server does not receive the manifest signing key or CurseForge API key.
+The workflow serializes releases so two deployments cannot overwrite each other.
 
 ## Security
 

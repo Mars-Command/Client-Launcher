@@ -11,7 +11,7 @@ import { Panel } from "./components/Panel";
 import { ServerStatusPanel } from "./components/ServerStatusPanel";
 import { SettingsPage } from "./components/SettingsPage";
 import { TitleBar } from "./components/TitleBar";
-import { AccountPanel } from "./components/AccountPanel";
+import { AccountPage } from "./components/AccountPage";
 import { CommunityPage } from "./components/CommunityPage";
 import { useCommunityAccount } from "./hooks/useCommunityAccount";
 import { useMissionControlConfig } from "./hooks/useMissionControlConfig";
@@ -32,6 +32,8 @@ const TRANSMISSION_DOT: Record<Transmission["tone"], string> = {
 	notice: "bg-amber-300",
 	server: "bg-cyan-300",
 };
+
+type ClientPage = "mission" | "community" | "account" | "settings";
 
 function TelemetryRow({
 	label,
@@ -71,10 +73,17 @@ function App() {
 
 	const pack = usePackIntegrity();
 	const updater = useClientUpdater();
-	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [communityOpen, setCommunityOpen] = useState(false);
-	const [accountOpen, setAccountOpen] = useState(false);
+	const [page, setPage] = useState<ClientPage>("mission");
+	const [returnPage, setReturnPage] = useState<ClientPage>("mission");
 	const account = useCommunityAccount();
+	const openPage = (next: ClientPage) => {
+		if (page !== next) setReturnPage(page);
+		setPage(next);
+	};
+	const togglePage = (target: ClientPage) => {
+		if (page === target) setPage(returnPage === target ? "mission" : returnPage);
+		else openPage(target);
+	};
 
 	const transmissions = useMemo<Transmission[]>(() => {
 		const motd = normalizeMotd(status?.motd);
@@ -101,37 +110,37 @@ function App() {
 				<TitleBar
 					accountName={account.user?.username}
 					accountPending={account.pending}
+					accountOpen={page === "account"}
 					onToggleAccount={() => {
-						setAccountOpen((open) => !open);
-						if (!accountOpen && !account.user && !account.pending) void account.login();
+						if (page !== "account" && !account.user && !account.pending) void account.login();
+						togglePage("account");
 					}}
-					settingsOpen={settingsOpen}
-					onToggleSettings={() =>
-						setSettingsOpen((open) => !open)
-					}
+					settingsOpen={page === "settings"}
+					onToggleSettings={() => togglePage("settings")}
 				/>
 
 				{updater.phase === "available" || updater.phase === "error" || updater.phase === "downloading" || updater.phase === "installing" ? (
 					<div role="status" className="flex shrink-0 items-center justify-between gap-3 border-b border-cyan-200/15 bg-cyan-300/5 px-4 py-2 text-xs text-cyan-100">
 						<span>{updater.phase === "available" ? `Client ${updater.update?.version} is available. Review it in Settings.` : updater.phase === "error" ? "Client update check/install failed. See Settings for details." : updater.phase === "installing" ? "Verified client update is installing..." : "Client update is downloading..."}</span>
-						<button type="button" onClick={() => setSettingsOpen(true)} className="shrink-0 rounded border border-white/10 px-2 py-1">Update settings</button>
+						<button type="button" onClick={() => openPage("settings")} className="shrink-0 rounded border border-white/10 px-2 py-1">Update settings</button>
 					</div>
 				) : null}
 				<nav aria-label="Client sections" className="flex shrink-0 gap-2 border-b border-white/8 px-3 py-2 text-xs">
-					<button type="button" aria-pressed={!communityOpen && !settingsOpen} onClick={() => { setCommunityOpen(false); setSettingsOpen(false); }} className="rounded-lg px-3 py-1 text-slate-300 hover:bg-white/10">Mission control</button>
-					<button type="button" aria-pressed={communityOpen && !settingsOpen} onClick={() => { setCommunityOpen(true); setSettingsOpen(false); }} className="rounded-lg px-3 py-1 text-cyan-200 hover:bg-white/10">Community</button>
+					<button type="button" aria-pressed={page === "mission"} onClick={() => openPage("mission")} className="rounded-lg px-3 py-1 text-slate-300 hover:bg-white/10">Mission control</button>
+					<button type="button" aria-pressed={page === "community"} onClick={() => openPage("community")} className="rounded-lg px-3 py-1 text-cyan-200 hover:bg-white/10">Community</button>
 				</nav>
-				{accountOpen && (!communityOpen || settingsOpen) ? <div className="shrink-0 px-3 pt-3"><AccountPanel account={account} /></div> : null}
-				{settingsOpen ? (
+				{page === "account" ? (
+					<AccountPage account={account} />
+				) : page === "settings" ? (
 					<SettingsPage
 						updater={updater}
-						onDonate={() => { setAccountOpen(true); void account.donate(); }}
+						onDonate={() => { openPage("account"); void account.donate(); }}
 						donationPending={account.pending}
 						pack={pack}
 						refreshingTelemetry={refreshing}
 						refreshTelemetry={refresh}
 					/>
-				) : communityOpen ? (
+				) : page === "community" ? (
 					<CommunityPage account={account} />
 				) : (
 					<div className="grid min-h-0 flex-1 grid-cols-12 gap-3 p-3">
@@ -167,7 +176,7 @@ function App() {
 						<section className="col-span-6 flex min-h-0 flex-col gap-3">
 							<DeploymentPanel
 								{...pack}
-								onOpenClientUpdates={() => setSettingsOpen(true)}
+								onOpenClientUpdates={() => openPage("settings")}
 							/>
 
 							{/* Absorbs vertical slack so no panel stretches into a void. */}
