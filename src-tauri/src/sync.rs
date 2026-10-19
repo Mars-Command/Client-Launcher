@@ -824,7 +824,7 @@ mod tests {
             pack_version: version.into(),
             minecraft_version: "1.21.1".into(),
             loader: "neoforge".into(),
-            loader_version: "21.1.250".into(),
+            loader_version: "21.1.259".into(),
             generated_at: "2026-01-01T00:00:00Z".into(),
             managed_dirs: vec!["config".into()],
             files: vec![ManifestFile {
@@ -984,7 +984,7 @@ mod tests {
             pack_version: "1.0.0".into(),
             minecraft_version: "1.21.1".into(),
             loader: "neoforge".into(),
-            loader_version: "21.1.250".into(),
+            loader_version: "21.1.259".into(),
             generated_at: "2026-01-01T00:00:00Z".into(),
             managed_dirs: Vec::new(),
             files: Vec::new(),

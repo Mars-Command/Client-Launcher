@@ -64,7 +64,7 @@ jobs:
                   manifest = json.loads(path.read_text(encoding="utf-8"))
                   assert manifest["packVersion"] == os.environ["PACK_VERSION"], "Pack version differs"
                   assert manifest["minecraftVersion"] == "1.21.1", "Minecraft version differs"
-                  assert manifest["loader"] == "neoforge" and manifest["loaderVersion"] == "21.1.250", "Loader differs"
+                  assert manifest["loader"] == "neoforge" and manifest["loaderVersion"] == "21.1.259", "Loader differs"
                   PY
                   if [[ -n "$PAYLOAD_ASSET" ]]; then
                     [[ "$PAYLOAD_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$ ]]

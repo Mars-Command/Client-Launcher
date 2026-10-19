@@ -36,7 +36,7 @@ const OVERRIDE_MANAGED_DIRS: &[&str] = &[
 ];
 const MINECRAFT_VERSION: &str = "1.21.1";
 const LOADER: &str = "neoforge";
-const LOADER_VERSION: &str = "21.1.250";
+const LOADER_VERSION: &str = "21.1.259";
 
 fn main() {
     load_local_env();
@@ -91,7 +91,7 @@ fn cf_pack(
         .unwrap_or(MINECRAFT_VERSION)
         .to_string();
 
-    // CF encodes the loader as e.g. "neoforge-21.1.250".
+    // CF encodes the loader as e.g. "neoforge-21.1.259".
     let loader_id = cf
         .pointer("/minecraft/modLoaders/0/id")
         .and_then(|v| v.as_str())

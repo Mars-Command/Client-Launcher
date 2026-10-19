@@ -908,7 +908,7 @@ pub(crate) mod tests {
             pack_version: version.into(),
             minecraft_version: "1.21.1".into(),
             loader: "neoforge".into(),
-            loader_version: "21.1.250".into(),
+            loader_version: "21.1.259".into(),
             generated_at: String::new(),
             managed_dirs: vec!["mods".into()],
             files: vec![],
@@ -1010,7 +1010,7 @@ side = "BOTH"
         for (range, version, expected) in [
             ("[1.21.1]", "1.21.1", Some(true)),
             ("[1.21.1]", "1.21", Some(false)),
-            ("[21.1,22)", "21.1.250", Some(true)),
+            ("[21.1,22)", "21.1.259", Some(true)),
             ("[21.1,22)", "22", Some(false)),
             ("(21.1,22]", "21.1", Some(false)),
             ("(21.1,22]", "22", Some(true)),

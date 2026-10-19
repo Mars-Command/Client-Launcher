@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn registers_isolated_profile_without_changing_existing_launcher_data() {
         let root = tempfile::tempdir().unwrap();
-        let version_id = "neoforge-21.1.250";
+        let version_id = "neoforge-21.1.259";
         let version_dir = root.path().join("versions").join(version_id);
         std::fs::create_dir_all(&version_dir).unwrap();
         std::fs::write(

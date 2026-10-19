@@ -443,7 +443,7 @@ mod tests {
             pack_version: "1.2.3".into(),
             minecraft_version: "1.21.1".into(),
             loader: "neoforge".into(),
-            loader_version: "21.1.250".into(),
+            loader_version: "21.1.259".into(),
             generated_at: "2026-01-01T00:00:00Z".into(),
             managed_dirs: vec!["mods".into(), "config".into()],
             files: vec![ManifestFile {

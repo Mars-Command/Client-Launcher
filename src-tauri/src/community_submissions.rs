@@ -461,7 +461,7 @@ mod tests {
         let bytes = crate::personal_mods::tests::jar(&crate::personal_mods::tests::metadata(
             "example",
             "[1.21.1]",
-            "[21.1.250]",
+            "[21.1.259]",
         ));
         std::fs::write(&path, &bytes).unwrap();
         (dir, path, bytes)
@@ -630,7 +630,7 @@ mod tests {
         jar.start_file("META-INF/neoforge.mods.toml", options)
             .unwrap();
         jar.write_all(
-            crate::personal_mods::tests::metadata("example", "[1.21.1]", "[21.1.250]").as_bytes(),
+            crate::personal_mods::tests::metadata("example", "[1.21.1]", "[21.1.259]").as_bytes(),
         )
         .unwrap();
         jar.start_file("payload.bin", options).unwrap();
